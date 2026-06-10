@@ -1,0 +1,346 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro YesBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/YesBankParser.kt) plus the BankParser.kt base-class fallbacks it delegates to. The dominant real-world format is the credit-card UPI spend: \"INR XXX.XX spent on YES BANK Card XNNNN @UPI_MERCHANT DD-MM-YYYY hh:mm:ss am/pm. Avl Lmt INR XXX,XXX.XX. SMS BLKCC NNNN to 9840909000 if not you\" Fixture bodies come verbatim from YesBankParserTest.kt."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.yesbank.bank",
+    "type": "sms-parser",
+    "name": "Yes Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["YESBNK", "YESBANK"],
+      "dltPatterns": ["^[A-Z]{2}-YESBNK-S$", "^[A-Z]{2}-YESBNK$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "verification",
+        "one time password",
+        "offer",
+        "discount",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "spent",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "avl lmt",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+spent"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "@UPI_(?<value>[^0-9]+?)\\s+\\d{2}-\\d{2}-\\d{4}"
+        },
+        {
+          "re": "@UPI_(?<value>[A-Z\\s]+)"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "YES\\s+BANK\\s+Card\\s+X*(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "SMS\\s+BLKCC\\s+(?<value>\\d{4})"
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "Avl\\s+Lmt\\s+INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avl\\s+Lmt:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avail\\s+Limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+Credit\\s+Limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "nsccl",
+        "clearing corporation",
+        "nach",
+        "ecs",
+        "groww",
+        "zerodha",
+        "upstox",
+        "kuvera",
+        "paytm money",
+        "etmoney",
+        "smallcase",
+        "angel one",
+        "5paisa",
+        "mutual fund",
+        "sip",
+        "elss",
+        "demat",
+        "folio",
+        "sovereign gold",
+        "cdsl",
+        "nsdl"
+      ],
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid"],
+      "income": ["credited", "deposited", "received", "refund"]
+    },
+    "cardRules": {
+      "includeKeywords": [
+        "yes bank card",
+        "sms blkcc",
+        "card ending",
+        "card xx",
+        "debit card",
+        "credit card",
+        "card no.",
+        "card number",
+        "card *",
+        "card x"
+      ],
+      "excludeKeywords": ["a/c", "saving account", "current account", "savings a/c", "current a/c"]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s+PVT\\.?\\s*LTD\\.?$", "\\s+PRIVATE\\s+LIMITED$", "\\s+LTD\\.?$"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["spent", "yes bank card", "avl lmt"],
+          "notContainsAny": ["groww", "zerodha", "upstox", "mutual fund", "demat", "iccl", "nsccl"]
+        },
+        "field": "transactionType",
+        "value": "CREDIT"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "credit card UPI spend - C N S Fuel Port",
+      "sender": "CP-YESBNK-S",
+      "receivedAt": "2025-08-24T18:17:25.000Z",
+      "body": "INR 404.36 spent on YES BANK Card X3349 @UPI_C N S FUEL PORT 24-08-2025 06:17:25 pm. Avl Lmt INR 211,476.24. SMS BLKCC 3349 to 9840909000 if not you",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "404.36",
+          "merchant": "C N S FUEL PORT",
+          "accountLast4": "3349",
+          "transactionType": "CREDIT",
+          "creditLimit": "211476.24",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "credit card UPI spend - S B Enterprises",
+      "sender": "VM-YESBNK-S",
+      "receivedAt": "2025-08-24T06:03:40.000Z",
+      "body": "INR 56.00 spent on YES BANK Card X3349 @UPI_S B ENTERPRISES 24-08-2025 06:03:40 am. Avl Lmt INR 211,880.60. SMS BLKCC 3349 to 9840909000 if not you",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "56.00",
+          "merchant": "S B ENTERPRISES",
+          "accountLast4": "3349",
+          "transactionType": "CREDIT",
+          "creditLimit": "211880.60",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "credit card UPI spend - Mohammed Akram",
+      "sender": "JX-YESBNK-S",
+      "receivedAt": "2025-08-23T11:51:19.000Z",
+      "body": "INR 24.00 spent on YES BANK Card X3349 @UPI_MOHAMMED AKRAM 23-08-2025 11:51:19 am. Avl Lmt INR 212,012.60. SMS BLKCC 3349 to 9840909000 if not you",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "24.00",
+          "merchant": "MOHAMMED AKRAM",
+          "accountLast4": "3349",
+          "transactionType": "CREDIT",
+          "creditLimit": "212012.60",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "credit card UPI spend - Surakshaa Healthcare",
+      "sender": "CP-YESBNK-S",
+      "receivedAt": "2025-08-23T10:02:59.000Z",
+      "body": "INR 250.00 spent on YES BANK Card X3349 @UPI_SURAKSHAA HEALTHCA 23-08-2025 10:02:59 am. Avl Lmt INR 212,036.60. SMS BLKCC 3349 to 9840909000 if not you",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "250.00",
+          "merchant": "SURAKSHAA HEALTHCA",
+          "accountLast4": "3349",
+          "transactionType": "CREDIT",
+          "creditLimit": "212036.60",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "account debit via base-class fallbacks",
+      "sender": "VM-YESBNK-S",
+      "receivedAt": "2026-05-20T12:00:00.000Z",
+      "body": "INR 2500.00 debited from A/c XX1234 on 20-05-2026 to SHARMA STORES UPI Ref 112233445566 -Yes Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2500.00",
+          "merchant": "SHARMA STORES",
+          "accountLast4": "1234",
+          "transactionType": "EXPENSE",
+          "reference": "112233445566",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "account credit via base-class fallbacks",
+      "sender": "VM-YESBNK-S",
+      "receivedAt": "2026-05-21T09:30:00.000Z",
+      "body": "INR 10000.00 received from RAHUL VERMA on 21-05-2026 in A/c XX1234. Ref 998877665544 -Yes Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "10000.00",
+          "merchant": "RAHUL VERMA",
+          "accountLast4": "1234",
+          "transactionType": "INCOME",
+          "reference": "998877665544",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "OTP message is filter-rejected",
+      "sender": "CP-YESBNK-S",
+      "receivedAt": "2025-08-20T10:00:00.000Z",
+      "body": "Dear Customer, your OTP for login is 123456. Do not share with anyone. -Yes Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "promotional offer is filter-rejected",
+      "sender": "CP-YESBNK-S",
+      "receivedAt": "2025-08-20T11:00:00.000Z",
+      "body": "Get exciting offers on Yes Bank Credit Cards. Apply now! Visit yesbank.in",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "payment request is filter-rejected",
+      "sender": "CP-YESBNK-S",
+      "receivedAt": "2025-08-20T12:00:00.000Z",
+      "body": "Payment request of INR 500.00 from merchant@upi. Ignore if already paid.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "payment due reminder is filter-rejected",
+      "sender": "CP-YESBNK-S",
+      "receivedAt": "2025-08-20T13:00:00.000Z",
+      "body": "Your Yes Bank Credit Card payment of INR 10,000 is due by 25-08-2025",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

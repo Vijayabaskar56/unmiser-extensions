@@ -1,0 +1,127 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro AlecuBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/AlecuBankParser.kt). ALECU (America's Largest Electric Credit Union) sends a single alert format: \"ALEC Alert - A debit|credit transaction from MERCHANT for $X.XX on account *1=01 was posted on Mar 30, 2026.\" The Kotlin isTransactionMessage requires BOTH \"alec alert\" AND \"transaction from\"; the manifest filter only supports any-of, so we gate on the more discriminating \"transaction from\" (every dispatched ALECU alert also carries \"ALEC Alert\"). The Kotlin merchant extractor splits at the first \";\" to drop trailing metadata (\"WE EGIES ;12345 ;AUTOPAY\"); here the same is achieved with a cleaning stripPattern."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "us.alecu.bank",
+    "type": "sms-parser",
+    "name": "ALECU",
+    "country": "US",
+    "currency": "USD",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["39872", "ALECU", "ALEC"],
+      "dltPatterns": ["^.*ALEC.*$"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "verification code"],
+      "requireAnyKeyword": ["transaction from"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "\\$(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "transaction\\s+from\\s+(?<value>.+?)\\s+for\\s+\\$"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "account\\s+\\*(?<value>\\d+=\\d+)"
+        },
+        {
+          "re": "account\\s+ending\\s+(?:in\\s+)?(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:a/c|acct|account)\\s*(?:no\\.?)?\\s*[Xx*]+(?<value>\\d{3,4})",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["a debit transaction"],
+      "income": ["a credit transaction"]
+    },
+    "cleaning": {
+      "stripPatterns": [";.*$"],
+      "minMerchantLength": 2
+    }
+  },
+  "fixtures": [
+    {
+      "name": "debit transaction - withdrawal",
+      "sender": "39872",
+      "receivedAt": "2026-03-30T10:00:00.000Z",
+      "body": "ALEC Alert - A debit transaction from WITHDRAWAL for $100.00 on account *1=01 was posted on Mar 30, 2026. Reply STOP to stop all texts.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100.00",
+          "currency": "USD",
+          "transactionType": "EXPENSE",
+          "merchant": "WITHDRAWAL",
+          "accountLast4": "101"
+        }
+      }
+    },
+    {
+      "name": "debit transaction - autopay with semicolons",
+      "sender": "39872",
+      "receivedAt": "2026-03-30T11:00:00.000Z",
+      "body": "ALEC Alert - A debit transaction from WE EGIES     ;12345 ;AUTOPAY for $177.33 on account *1=01 was posted on Mar 30, 2026. Reply STOP to stop all texts.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "177.33",
+          "currency": "USD",
+          "transactionType": "EXPENSE",
+          "merchant": "WE EGIES",
+          "accountLast4": "101"
+        }
+      }
+    },
+    {
+      "name": "credit transaction - deposit",
+      "sender": "ALECU",
+      "receivedAt": "2026-03-30T12:00:00.000Z",
+      "body": "ALEC Alert - A credit transaction from PAYROLL DEPOSIT for $50.00 on account *1=01 was posted on Mar 30, 2026.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "50.00",
+          "currency": "USD",
+          "transactionType": "INCOME",
+          "merchant": "PAYROLL DEPOSIT",
+          "accountLast4": "101"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "39872",
+      "receivedAt": "2026-03-30T13:00:00.000Z",
+      "body": "Your ALEC verification code is 123456. Do not share this code with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "balance alert without transaction is filter-rejected",
+      "sender": "39872",
+      "receivedAt": "2026-03-30T14:00:00.000Z",
+      "body": "ALEC Alert - Your account *1=01 balance is $52.10 as of Mar 30, 2026.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

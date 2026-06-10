@@ -1,0 +1,195 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro OldHickoryParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/OldHickoryParser.kt) Old Hickory Credit Union (USA) sends account-alert style messages: \"A transaction for $27.00 has posted to ACCOUNT NAME (part of ACCOUNT#), which is above the $0.00 value you set.\" Known deviations from the Kotlin parser (engine cannot express them): - Kotlin prefixes the merchant with \"Account: \" (e.g. \"Account: SAVINGS ACCOUNT\") and the reference with \"Alert threshold: $\". The manifest engine only extracts capture groups, so merchant is the bare account name and reference is the bare threshold amount. - Kotlin returns non-numeric account identifiers (e.g. \"ACCOUNT#\") verbatim from \"(part of ...)\"; the engine normalizes accountLast4 to digits, so digit-less identifiers yield no accountLast4."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "us.oldhickory.bank",
+    "type": "sms-parser",
+    "name": "Old Hickory Credit Union",
+    "country": "US",
+    "currency": "USD",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["(877) 590-7589", "8775907589", "OLDHICKORY", "OHCU"],
+      "dltPatterns": ["HICKORY", "^[A-Z]{2}-HICKORY-[A-Z]$", "^\\(?877\\)?[\\s.-]*590[\\s.-]*7589$"]
+    },
+    "filter": {
+      "requireAnyKeyword": [
+        "transaction",
+        "has posted",
+        "posted to",
+        "above the",
+        "value you set",
+        "account name",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "\\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        },
+        {
+          "re": "transaction for\\s+\\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        },
+        {
+          "re": "posted.*?\\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "posted to\\s+(?<value>[^(\\n]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "\\(part of\\s+(?<value>[^)]+)\\)",
+          "takeLast4": true
+        }
+      ],
+      "reference": [
+        {
+          "re": "above the\\s+\\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+value you set"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["has posted", "transaction for"]
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["transaction", "posted"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "merchant",
+        "value": "Transaction Alert"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "standard transaction alert (non-numeric account id)",
+      "sender": "(877) 590-7589",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "A transaction for $27.00 has posted to ACCOUNT NAME (part of ACCOUNT#), which is above the $0.00 value you set.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "27.00",
+          "merchant": "ACCOUNT NAME",
+          "transactionType": "EXPENSE",
+          "reference": "0.00"
+        }
+      }
+    },
+    {
+      "name": "numeric sender format",
+      "sender": "8775907589",
+      "receivedAt": "2026-06-02T10:00:00.000Z",
+      "body": "A transaction for $150.50 has posted to SAVINGS ACCOUNT (part of SAV1234), which is above the $100.00 value you set.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "150.50",
+          "merchant": "SAVINGS ACCOUNT",
+          "accountLast4": "1234",
+          "transactionType": "EXPENSE",
+          "reference": "100.00"
+        }
+      }
+    },
+    {
+      "name": "text sender format",
+      "sender": "OLDHICKORY",
+      "receivedAt": "2026-06-03T10:00:00.000Z",
+      "body": "A transaction for $75.25 has posted to CHECKING ACCOUNT (part of CHK5678), which is above the $50.00 value you set.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "75.25",
+          "merchant": "CHECKING ACCOUNT",
+          "accountLast4": "5678",
+          "transactionType": "EXPENSE",
+          "reference": "50.00"
+        }
+      }
+    },
+    {
+      "name": "large amount with commas",
+      "sender": "OHCU",
+      "receivedAt": "2026-06-04T10:00:00.000Z",
+      "body": "A transaction for $1,250.00 has posted to BUSINESS CHECKING (part of BUS9999), which is above the $1,000.00 value you set.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1250.00",
+          "merchant": "BUSINESS CHECKING",
+          "accountLast4": "9999",
+          "transactionType": "EXPENSE",
+          "reference": "1,000.00"
+        }
+      }
+    },
+    {
+      "name": "DLT sender format",
+      "sender": "US-HICKORY-A",
+      "receivedAt": "2026-06-05T10:00:00.000Z",
+      "body": "A transaction for $42.99 has posted to CREDIT CARD (part of CC1111), which is above the $25.00 value you set.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "42.99",
+          "merchant": "CREDIT CARD",
+          "accountLast4": "1111",
+          "transactionType": "EXPENSE",
+          "reference": "25.00"
+        }
+      }
+    },
+    {
+      "name": "zero threshold",
+      "sender": "(877) 590-7589",
+      "receivedAt": "2026-06-06T10:00:00.000Z",
+      "body": "A transaction for $5.00 has posted to YOUTH SAVINGS (part of YS2222), which is above the $0.00 value you set.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5.00",
+          "merchant": "YOUTH SAVINGS",
+          "accountLast4": "2222",
+          "transactionType": "EXPENSE",
+          "reference": "0.00"
+        }
+      }
+    },
+    {
+      "name": "promotional message is filter-rejected",
+      "sender": "OHCU",
+      "receivedAt": "2026-06-07T10:00:00.000Z",
+      "body": "Old Hickory CU: Enjoy our new mobile app! Download today and manage your money on the go.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

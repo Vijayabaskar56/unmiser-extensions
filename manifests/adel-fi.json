@@ -1,0 +1,130 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro AdelFiParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/AdelFiParser.kt). AdelFi Credit Union (USA) sends alerts from short code 42141 in the form: \"Transaction Alert from AdelFi.\\n**1234 had a transaction of ($15.00). Description: 8042999971 MERCHANT NAME CITY CAUS. Date: Dec 19, 2025\" The Kotlin parser classifies every alert as CREDIT (credit-union card transactions) and strips the leading numeric reference off the description."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "us.adelfi.bank",
+    "type": "sms-parser",
+    "name": "AdelFi",
+    "country": "US",
+    "currency": "USD",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["42141"],
+      "dltPatterns": ["^.*42141.*$"]
+    },
+    "filter": {
+      "requireAnyKeyword": ["Transaction Alert from AdelFi"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "\\(\\$(?<value>\\d+(?:\\.\\d{2})?)\\)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "Description:\\s*(?<value>.+?)(?:\\.\\s*Date:|$)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account).*?(?<value>\\d+)(?:\\s|$)",
+          "takeLast4": true
+        },
+        {
+          "re": "\\*\\*(?<value>\\d{4})"
+        }
+      ]
+    },
+    "cleaning": {
+      "stripPatterns": ["^\\d+\\s+"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "rejectWhen",
+        "when": {
+          "notContainsAny": ["had a transaction of"]
+        },
+        "reason": "FILTER_REJECTED"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "transactionType",
+        "value": "CREDIT"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "transaction - tax service",
+      "sender": "42141",
+      "receivedAt": "2025-12-19T10:00:00.000Z",
+      "body": "Transaction Alert from AdelFi.\n**1234 had a transaction of ($15.00). Description: 8042999971 P AND F TAX INC        CITY        CAUS. Date: Dec 19, 2025",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "15.00",
+          "merchant": "P AND F TAX INC CITY CAUS",
+          "accountLast4": "1234",
+          "transactionType": "CREDIT",
+          "currency": "USD"
+        }
+      }
+    },
+    {
+      "name": "transaction - amazon purchase",
+      "sender": "42141",
+      "receivedAt": "2025-12-19T12:00:00.000Z",
+      "body": "Transaction Alert from AdelFi.\n**1234 had a transaction of ($33.79). Description: 235251000999657 AMAZON MKTPL*ZX0Q15PH2 Amzn.com/billWAUS. Date: Dec 19, 2025",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "33.79",
+          "merchant": "AMAZON MKTPL*ZX0Q15PH2 Amzn.com/billWAUS",
+          "accountLast4": "1234",
+          "transactionType": "CREDIT",
+          "currency": "USD"
+        }
+      }
+    },
+    {
+      "name": "transaction - grocery store",
+      "sender": "42141",
+      "receivedAt": "2025-12-20T09:30:00.000Z",
+      "body": "Transaction Alert from AdelFi.\n**5678 had a transaction of ($100.50). Description: 123456789 GROCERY STORE LOCATION CAUS. Date: Dec 20, 2025",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100.50",
+          "merchant": "GROCERY STORE LOCATION CAUS",
+          "accountLast4": "5678",
+          "transactionType": "CREDIT",
+          "currency": "USD"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "42141",
+      "receivedAt": "2025-12-21T08:00:00.000Z",
+      "body": "Your AdelFi one-time verification code is 482913. Do not share this code with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

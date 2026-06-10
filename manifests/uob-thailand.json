@@ -1,0 +1,232 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro UOBThailandParser.kt + BaseThailandBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/). The UOB Thailand parser itself only defines canHandle (\"UOB\" exact, contains \"UOB THAILAND\" or \"UOBTHAI\") and getBankName — all extraction and classification behavior comes from BaseThailandBankParser (THB amounts in Thai/English, \"Bal/คงเหลือ\" balances, \"A/C|บช xNNNN\" accounts, \"at|ร้าน\" merchants, Thai+English type keywords, \"Available limit/วงเงินคงเหลือ\") plus the BankParser base fallbacks (CompiledPatterns Account/Reference). The first fixture body is verbatim from ThailandBankParsersTest.kt (\"uob thailand parser handles key paths\" and the factory suite)."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "th.uob.bank",
+    "type": "sms-parser",
+    "name": "UOB Thailand",
+    "country": "TH",
+    "currency": "THB",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["UOB"],
+      "dltPatterns": ["^.*UOB\\s?THAILAND.*$", "^.*UOBTHAI.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "รหัส",
+        "ยืนยัน",
+        "สมัคร",
+        "โปรโมชั่น",
+        "promotion",
+        "cashback offer"
+      ],
+      "requireAnyKeyword": [
+        "เงินเข้า",
+        "เงินออก",
+        "ถอนเงิน",
+        "โอนเงิน",
+        "ใช้จ่าย",
+        "เงินฝาก",
+        "รับเงิน",
+        "คงเหลือ",
+        "บาท",
+        "ยอดใช้จ่าย",
+        "withdrawal",
+        "deposit",
+        "transfer",
+        "payment",
+        "spent",
+        "receive",
+        "bal",
+        "thb",
+        "card transaction",
+        "card payment",
+        "credit card spending",
+        "available limit"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:THB|฿)\\s*(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*USD"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "(?:at|ร้าน)\\s+(?<value>[A-Za-z0-9\\s&._-]+?)(?:\\s+(?:A/C|บช|Bal|คงเหลือ|Available|on|$))"
+        },
+        {
+          "re": "at\\s+(?<value>[A-Za-z0-9\\s&._-]+)$"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]+)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]+)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/C|บช)\\s*x(?<value>\\d{4})"
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "(?:Available limit|วงเงินคงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": ["clearing corporation", "mutual fund", "sip purchase"],
+      "credit": ["credit card spending", "ยอดใช้จ่ายต่างประเทศ", "ยอดใช้จ่าย"],
+      "expense": [
+        "เงินออก",
+        "ถอนเงิน",
+        "ถอนเงินสด",
+        "โอนเงินออก",
+        "โอนเงินผ่าน",
+        "ใช้จ่ายบัตร",
+        "ใช้จ่าย",
+        "withdrawal",
+        "payment",
+        "you spent",
+        "transfer out",
+        "card payment",
+        "card transaction",
+        "atm withdrawal"
+      ],
+      "income": [
+        "เงินเข้า",
+        "เงินฝาก",
+        "รับเงิน",
+        "โอนเงินเข้า",
+        "รับเงินพร้อมเพย์",
+        "รับเงินโอน",
+        "เงินฝากเข้า",
+        "deposit",
+        "receive",
+        "transfer in",
+        "transfer received"
+      ]
+    },
+    "cleaning": {
+      "minMerchantLength": 2,
+      "commonWords": ["ผ่าน", "โดย", "จาก", "ที่", "ไปยัง", "ถึง"]
+    }
+  },
+  "fixtures": [
+    {
+      "name": "UOB card transaction (English)",
+      "sender": "UOB",
+      "receivedAt": "2026-01-21T14:32:00.000Z",
+      "body": "UOB: Card transaction 3,200.00 THB at AMAZON Bal 22,400.00 THB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "3200.00",
+          "transactionType": "EXPENSE",
+          "merchant": "AMAZON",
+          "balance": "22400.00"
+        }
+      }
+    },
+    {
+      "name": "UOB transfer received (English, synthesized)",
+      "sender": "UOB",
+      "receivedAt": "2026-01-22T09:15:00.000Z",
+      "body": "UOB: Transfer received 6,500.00 THB A/C x7788 Bal 19,200.00 THB",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "6500.00",
+          "transactionType": "INCOME",
+          "accountLast4": "7788",
+          "balance": "19200.00"
+        }
+      }
+    },
+    {
+      "name": "UOB transfer out (Thai, synthesized)",
+      "sender": "UOB THAILAND",
+      "receivedAt": "2026-01-23T11:05:00.000Z",
+      "body": "UOB: โอนเงินออก 1,500.00 บาท บช x7788 คงเหลือ 17,700.00 บาท",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "1500.00",
+          "transactionType": "EXPENSE",
+          "accountLast4": "7788",
+          "balance": "17700.00"
+        }
+      }
+    },
+    {
+      "name": "UOB credit card spending with available limit (synthesized)",
+      "sender": "UOBTHAI",
+      "receivedAt": "2026-01-24T18:40:00.000Z",
+      "body": "UOB: Credit card spending 4,250.00 THB Card x3344 at CENTRAL WORLD on 24/01/26 18:40 Available limit 55,750.00 THB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "4250.00",
+          "transactionType": "CREDIT",
+          "merchant": "CENTRAL WORLD",
+          "accountLast4": "3344",
+          "creditLimit": "55750.00"
+        }
+      }
+    },
+    {
+      "name": "OTP message is filter-rejected",
+      "sender": "UOB",
+      "receivedAt": "2026-01-25T10:00:00.000Z",
+      "body": "UOB: รหัส OTP ของคุณคือ 654321 ใช้ภายใน 5 นาที ห้ามบอกรหัสนี้แก่ผู้อื่น",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "Promotion message is filter-rejected",
+      "sender": "UOB",
+      "receivedAt": "2026-01-26T12:00:00.000Z",
+      "body": "UOB: Special promotion! Apply for a UOB credit card today and enjoy exclusive privileges.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

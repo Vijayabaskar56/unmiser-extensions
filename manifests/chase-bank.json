@@ -1,0 +1,175 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro ChaseBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/ChaseBankParser.kt) plus the BankParser.kt base-class fallbacks it relies on (generic to/from/at merchant patterns, Account/Card masked-number patterns). Chase (USA) sends card alerts from short code 24273; bodies look like \"Card Name: You made a $9.17 transaction with TACO BELL on Mar 17, 2026 at 1:56 PM ET.\" and \"Card Name: A $X.XX refund was posted...\"."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "us.chase.bank",
+    "type": "sms-parser",
+    "name": "Chase",
+    "country": "US",
+    "currency": "USD",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["24273"],
+      "dltPatterns": ["^.*CHASE.*$"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "verification code", "security code"],
+      "requireAnyKeyword": ["transaction", "purchase", "refund", "charged", "credit was posted"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "\\$(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "transaction\\s+with\\s+(?<value>.+?)\\s+on\\s+"
+        },
+        {
+          "re": "purchase\\s+at\\s+(?<value>.+?)\\s+on\\s+"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "ending\\s+(?:in\\s+)?(?<value>\\d{4})"
+        }
+      ]
+    },
+    "typeRules": {
+      "income": ["refund", "credit was posted"],
+      "expense": ["transaction", "purchase", "charged"]
+    },
+    "cardRules": {
+      "includeKeywords": [
+        "visa",
+        "mastercard",
+        "card ending",
+        "credit card",
+        "debit card",
+        "card no.",
+        "card number",
+        "card xx"
+      ],
+      "excludeKeywords": []
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*$",
+        "\\s+on\\s+\\d{2}.*$",
+        "\\s+at\\s+\\d{2}:\\d{2}.*$",
+        "\\s*-\\s*$",
+        "\\s+PVT\\.?\\s+LTD\\.?$",
+        "(?:\\s+LTD\\.?|\\s+LIMITED)$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["refund", "credit was posted"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "credit card transaction with merchant",
+      "sender": "24273",
+      "receivedAt": "2026-03-17T17:56:00.000Z",
+      "body": "Rapid Rewards Plus Visa: You made a $9.17 transaction with TACO BELL 740493 on Mar 17, 2026 at 1:56 PM ET.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "9.17",
+          "merchant": "TACO BELL 740493",
+          "transactionType": "EXPENSE",
+          "currency": "USD",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "refund posted classified as income",
+      "sender": "24273",
+      "receivedAt": "2026-05-30T15:10:00.000Z",
+      "body": "Freedom Unlimited Visa: A $25.00 refund was posted for your purchase at AMAZON MKTP on May 30, 2026.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25.00",
+          "merchant": "AMAZON MKTP",
+          "transactionType": "INCOME",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "purchase with card ending last4",
+      "sender": "24273",
+      "receivedAt": "2026-06-05T19:22:00.000Z",
+      "body": "Chase: You made a $120.50 purchase at BEST BUY on Jun 05, 2026 with your credit card ending in 4321.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "120.50",
+          "merchant": "BEST BUY",
+          "accountLast4": "4321",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "charged alert with sender containing CHASE",
+      "sender": "CHASE",
+      "receivedAt": "2026-06-07T08:05:00.000Z",
+      "body": "Chase Alert: Your credit card ending 9012 was charged $45.99 at NETFLIX on Jun 07, 2026.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "45.99",
+          "merchant": "NETFLIX",
+          "accountLast4": "9012",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "verification code is filter-rejected",
+      "sender": "24273",
+      "receivedAt": "2026-06-01T12:00:00.000Z",
+      "body": "Chase: Your verification code is 123456. Never share this code with anyone. We will never call you to ask for it.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

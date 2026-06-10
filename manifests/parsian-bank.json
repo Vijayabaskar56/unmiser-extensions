@@ -1,0 +1,189 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro ParsianBankParser.kt + BaseIranianBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/). ParsianBankParser only overrides canHandle()/getBankName(); all extraction behavior lives in the Iranian base: \"مبلغ <amount> ریال|تومان\" amount lines, \"مانده:\" balance, Persian type keywords (برداشت/پرداخت/خرید/انتقال/مصرف -> EXPENSE, واریز -> INCOME). The Kotlin base enforces a minimum amount of 1000 IRR, approximated here by requiring either comma-grouped thousands or a plain 4+ digit run."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "ir.parsian.bank",
+    "type": "sms-parser",
+    "name": "Parsian Bank",
+    "country": "IR",
+    "currency": "IRR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["PARSIANBANK", "PARSIAN", "PARSIAN BANK", "PERSIANBANK", "PERSIAN"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "رمز یکبار مصرف",
+        "کد تایید",
+        "تبلیغ",
+        "پیشنهاد",
+        "تخفیف",
+        "cashback offer"
+      ],
+      "requireAnyKeyword": [
+        "مبلغ",
+        "ریال",
+        "تومان",
+        "irr",
+        "toman",
+        "برداشت",
+        "واریز",
+        "پرداخت",
+        "خرید",
+        "انتقال",
+        "debit",
+        "credit",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "مبلغ\\s*(?<value>\\d{1,3}(?:,\\d{3})+|\\d{4,})\\s*(?:ریال|تومان)"
+        },
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})+|\\d{4,})\\s*(?:ریال|تومان)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "(?<value>\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4})"
+        }
+      ],
+      "balance": [
+        {
+          "re": "مانده\\s*:?\\s*(?<value>\\d{1,3}(?:,\\d{3})*)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account).*?(?<value>\\d+)(?:\\s|$)",
+          "takeLast4": true
+        },
+        {
+          "re": "\\d{4}[-\\s]?(?<value>\\d{4})"
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "clearing corporation",
+        "groww",
+        "zerodha",
+        "upstox",
+        "mutual fund",
+        "sip"
+      ],
+      "expense": ["برداشت", "پرداخت", "خرید", "انتقال", "مصرف"],
+      "income": ["واریز", "credited"]
+    },
+    "cardRules": {
+      "includeKeywords": ["کارت", "card", "کارت بدهی", "کارت اعتباری"],
+      "excludeKeywords": []
+    },
+    "pipeline": [
+      {
+        "kind": "rejectWhen",
+        "when": {
+          "containsAll": ["درخواست", "پرداخت"]
+        },
+        "reason": "FILTER_REJECTED"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "deposit transaction",
+      "sender": "PARSIANBANK",
+      "receivedAt": "2026-06-01T09:00:00.000Z",
+      "body": "مبلغ 2,000,000 تومان واریز به حساب شما انجام شد. مانده: 3,000,000 تومان",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "2000000",
+          "balance": "3000000",
+          "transactionType": "INCOME",
+          "currency": "IRR",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "withdrawal transaction",
+      "sender": "PARSIAN",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "مبلغ 500,000 تومان از حساب شما برداشت شد. مانده: 2,500,000 تومان",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "500000",
+          "balance": "2500000",
+          "transactionType": "EXPENSE",
+          "currency": "IRR",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "card purchase transaction with card number",
+      "sender": "PERSIANBANK",
+      "receivedAt": "2026-06-01T11:00:00.000Z",
+      "body": "مبلغ 150,000 تومان خرید با کارت 1234-5678-9012-3456 انجام شد. مانده: 2,350,000 تومان",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "150000",
+          "balance": "2350000",
+          "merchant": "1234-5678-9012-3456",
+          "accountLast4": "5678",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "transfer classified as EXPENSE",
+      "sender": "PARSIAN BANK",
+      "receivedAt": "2026-06-01T12:00:00.000Z",
+      "body": "مبلغ 800,000 تومان انتقال یافت. مانده: 1,550,000 تومان",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "800000",
+          "balance": "1550000",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "confirmation code message is filter-rejected",
+      "sender": "PARSIAN",
+      "receivedAt": "2026-06-02T09:00:00.000Z",
+      "body": "بانک پارسیان: کد تایید شما 654321 می باشد. این کد را در اختیار دیگران قرار ندهید.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

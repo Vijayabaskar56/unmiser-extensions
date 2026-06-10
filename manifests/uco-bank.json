@@ -1,0 +1,236 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro UCOBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/UCOBankParser.kt) plus the BankParser.kt base-class fallbacks it delegates to. Documented formats: - Debit: \"A/c XX1111 Debited with Rs.2000.00 on 21-09-2025 by UCO-UPI.Avl Bal Rs.11111.11. ...\" - Credit: \"A/c XX1111 Credited with Rs.2,000.00 on 21-09-2025 by UCO-UPI.Avl Bal Rs.11111.11. ... -UCO Bank\" Sender patterns: XX-UCOBNK-S / XX-UCOBNK-T plus any id containing UCOBNK / UCOBANK / \"UCO BANK\"."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.uco.bank",
+    "type": "sms-parser",
+    "name": "UCO Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["UCOBNK", "UCOBANK", "UCO BANK"],
+      "dltPatterns": ["UCOBNK", "UCOBANK", "UCO BANK", "^[A-Z]{2}-UCOBNK-[ST]$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "by\\s+(?<value>[^.\\n]+?)(?:\\.Avl|$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Avl\\s+Bal\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+Balance\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Balance[:.]?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "ref[:#]?\\s*(?<value>\\w+)"
+        },
+        {
+          "re": "txn[:#]?\\s*(?<value>\\w+)"
+        },
+        {
+          "re": "transaction\\s+id[:#]?\\s*(?<value>\\w+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "A/c\\s+[X]{2}(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "Account\\s+[X]{2}(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "Acc\\s+[X]{2}(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "A/c\\s+[*]{2}(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Acct|Account)\\s*(?:No\\.?)?\\s*[Xx*]+(?<value>\\d{3,})",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "nsccl",
+        "clearing corporation",
+        "groww",
+        "zerodha",
+        "upstox",
+        "mutual fund",
+        "sip",
+        "demat",
+        "smallcase"
+      ],
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["credited", "deposited", "received", "refund"]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s+PVT\\.?\\s+LTD\\.?$", "\\s+LTD\\.?$", "\\s*-\\s*$"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credited with"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["debited with"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["uco-upi"]
+        },
+        "field": "merchant",
+        "value": "UPI Transfer"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "upi debit with balance (documented format)",
+      "sender": "AD-UCOBNK-S",
+      "receivedAt": "2025-09-21T10:15:00.000Z",
+      "body": "A/c XX1111 Debited with Rs.2000.00 on 21-09-2025 by UCO-UPI.Avl Bal Rs.11111.11. Report Dispute https://spgrs.ucoonline.in/Home_Page.jsp",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2000.00",
+          "merchant": "UPI Transfer",
+          "accountLast4": "1111",
+          "balance": "11111.11",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "upi credit with comma amount (documented format)",
+      "sender": "JM-UCOBNK-T",
+      "receivedAt": "2025-09-21T12:30:00.000Z",
+      "body": "A/c XX1111 Credited with Rs.2,000.00 on 21-09-2025 by UCO-UPI.Avl Bal Rs.11111.11. Report Dispute https://spgrs.ucoonline.in/Home_Page.jsp -UCO Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2000.00",
+          "merchant": "UPI Transfer",
+          "accountLast4": "1111",
+          "balance": "11111.11",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "merchant debit with reference",
+      "sender": "VK-UCOBNK-S",
+      "receivedAt": "2026-05-12T09:05:00.000Z",
+      "body": "A/c XX4321 Debited with Rs.450.00 on 12-05-2026 by AMAZON PAY.Avl Bal Rs.9876.54. Ref: 123456789012 -UCO Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "450.00",
+          "merchant": "AMAZON PAY",
+          "accountLast4": "4321",
+          "balance": "9876.54",
+          "reference": "123456789012",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "asterisk-masked account salary credit",
+      "sender": "AX-UCOBNK-S",
+      "receivedAt": "2026-06-01T08:00:00.000Z",
+      "body": "A/c **2299 Credited with Rs.15,000.00 on 01-06-2026 by NEFT SALARY CREDIT.Avl Bal Rs.52,340.75 -UCO Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "15000.00",
+          "merchant": "NEFT SALARY CREDIT",
+          "accountLast4": "2299",
+          "balance": "52340.75",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "AD-UCOBNK-S",
+      "receivedAt": "2026-06-01T08:30:00.000Z",
+      "body": "Your OTP for UCO Bank transaction is 482913. Do not share it with anyone. -UCO Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

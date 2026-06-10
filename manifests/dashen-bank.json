@@ -1,0 +1,198 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro DashenBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/DashenBankParser.kt). Dashen Bank (Ethiopia, ETB) sends \"your account 1234***5678 has been credited/debited with ETB ...\" narratives (with a quirky doubled \"on on\" before the date in person-to-person credits), Telebirr wallet transfer messages, a \"Your current/account balance is ETB ...\" trailer, and either a \"Ref No:<digits>\" reference or a receipt.dashensuperapp.com receipt URL. No original Kotlin tests exist for this parser; fixtures are synthesized from the parser's regexes and doc comments."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "et.dashen.bank",
+    "type": "sms-parser",
+    "name": "Dashen Bank",
+    "country": "ET",
+    "currency": "ETB",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["DASHENBANK"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "ETB\\s+(?<value>[0-9,]+(?:\\.[0-9]{1,2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "credited to the (?<value>Telebirr account [+\\d]+)"
+        },
+        {
+          "re": "from\\s+(?<value>[A-Z][A-Z\\s]*?)\\s+on\\s+on"
+        },
+        {
+          "re": "from\\s+(?<value>telebirr account number \\d+\\s)Ref"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Your\\s+current\\s+balance\\s+is\\s+ETB\\s+(?<value>[0-9,]+(?:\\.[0-9]{1,2})?)"
+        },
+        {
+          "re": "Your\\s+account\\s+balance\\s+is\\s+ETB\\s+(?<value>[0-9,]+(?:\\.[0-9]{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?<value>https://receipt\\.dashensuperapp\\.com/receipt/[^\\s]+)"
+        },
+        {
+          "re": "Ref\\s+No:(?<value>\\d+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?<value>\\d{4}\\*+\\d+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "income": [
+        "has been credited",
+        "credited with",
+        "you have received",
+        "credited",
+        "deposited",
+        "received",
+        "refund"
+      ],
+      "expense": [
+        "has been debited",
+        "debited with",
+        "debited from",
+        "debited",
+        "withdrawn",
+        "spent",
+        "charged",
+        "paid",
+        "purchase",
+        "deducted"
+      ]
+    },
+    "cleaning": {
+      "minMerchantLength": 2
+    }
+  },
+  "fixtures": [
+    {
+      "name": "credit from person with doubled-on date and ref no",
+      "sender": "DASHENBANK",
+      "receivedAt": "2025-05-12T10:15:00.000Z",
+      "body": "Dear Customer, your account 1234***5678 has been credited with ETB 2,500.00 from ABEBE KEBEDE on on 12/05/2025. Your current balance is ETB 7,850.50. Ref No:251205123456 Thank you for banking with Dashen Bank!",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2500.00",
+          "merchant": "ABEBE KEBEDE",
+          "accountLast4": "5678",
+          "balance": "7850.50",
+          "transactionType": "INCOME",
+          "reference": "251205123456"
+        }
+      }
+    },
+    {
+      "name": "debit to telebirr account with receipt url",
+      "sender": "DASHENBANK",
+      "receivedAt": "2025-05-13T09:30:00.000Z",
+      "body": "ETB 500.00 has been debited from your account 1234***5678 and credited to the Telebirr account +251911223344 on 13/05/2025. Your current balance is ETB 7,350.50. https://receipt.dashensuperapp.com/receipt/a1b2c3d4",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "Telebirr account +251911223344",
+          "accountLast4": "5678",
+          "balance": "7350.50",
+          "transactionType": "EXPENSE",
+          "reference": "https://receipt.dashensuperapp.com/receipt/a1b2c3d4"
+        }
+      }
+    },
+    {
+      "name": "credit from telebirr account number with account balance trailer",
+      "sender": "DASHENBANK",
+      "receivedAt": "2025-05-14T14:00:00.000Z",
+      "body": "Dear Customer, your account 9876***4321 has been credited with ETB 1,200.00 from telebirr account number 251911223344 Ref No:987654321 Your account balance is ETB 3,420.75.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1200.00",
+          "merchant": "telebirr account number 251911223344",
+          "accountLast4": "4321",
+          "balance": "3420.75",
+          "transactionType": "INCOME",
+          "reference": "987654321"
+        }
+      }
+    },
+    {
+      "name": "you have received credit from person",
+      "sender": "DASHENBANK",
+      "receivedAt": "2025-05-15T08:45:00.000Z",
+      "body": "You have received ETB 300.00 from HELEN TADESSE on on 15/05/2025 to your account 5555***8888. Your current balance is ETB 900.00. Ref No:1122334455",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "300.00",
+          "merchant": "HELEN TADESSE",
+          "accountLast4": "8888",
+          "balance": "900.00",
+          "transactionType": "INCOME",
+          "reference": "1122334455"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "DASHENBANK",
+      "receivedAt": "2025-05-16T11:00:00.000Z",
+      "body": "Dear Customer, your OTP for Dashen SuperApp login is 123456. Do not share it with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

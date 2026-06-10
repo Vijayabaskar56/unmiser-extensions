@@ -1,0 +1,286 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro KasikornBankParser.kt + BaseThailandBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/ core/bank/). The Kasikorn parser itself only defines canHandle; all field extraction comes from the Thailand base class (Thai + English THB formats) plus the shared BankParser account/reference fallbacks (CompiledPatterns). Fixture bodies are taken verbatim from ThailandBankParsersTest.kt."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "th.kasikorn.bank",
+    "type": "sms-parser",
+    "name": "Kasikorn Bank",
+    "country": "TH",
+    "currency": "THB",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["KBANK"],
+      "dltPatterns": ["^.*KASIKORN.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "รหัส",
+        "ยืนยัน",
+        "สมัคร",
+        "โปรโมชั่น",
+        "promotion",
+        "cashback offer"
+      ],
+      "requireAnyKeyword": [
+        "เงินเข้า",
+        "เงินออก",
+        "ถอนเงิน",
+        "โอนเงิน",
+        "ใช้จ่าย",
+        "เงินฝาก",
+        "รับเงิน",
+        "คงเหลือ",
+        "บาท",
+        "ยอดใช้จ่าย",
+        "withdrawal",
+        "deposit",
+        "transfer",
+        "payment",
+        "spent",
+        "receive",
+        "bal",
+        "thb",
+        "card transaction",
+        "card payment",
+        "credit card spending",
+        "available limit"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:THB|฿)\\s*(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*USD"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "(?:at|ร้าน)\\s+(?<value>[A-Za-z0-9\\s&._-]+?)(?:\\s+(?:A/C|บช|Bal|คงเหลือ|Available|on|$))"
+        },
+        {
+          "re": "at\\s+(?<value>[A-Za-z0-9\\s&._-]+)$"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        },
+        {
+          "re": "Reference\\s+Number[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx\\*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx\\*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account).*?(?<value>\\d+)(?:\\s|$)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/C|บช)\\s*x(?<value>\\d{4})"
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "(?:Available limit|วงเงินคงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": ["mutual fund", "clearing corporation", "sip purchase"],
+      "credit": ["credit card spending", "ยอดใช้จ่ายต่างประเทศ", "ยอดใช้จ่าย"],
+      "expense": [
+        "เงินออก",
+        "ถอนเงิน",
+        "ถอนเงินสด",
+        "โอนเงินออก",
+        "โอนเงินผ่าน",
+        "ใช้จ่ายบัตร",
+        "ใช้จ่าย",
+        "withdrawal",
+        "payment",
+        "you spent",
+        "transfer out",
+        "card payment",
+        "card transaction",
+        "atm withdrawal"
+      ],
+      "income": [
+        "เงินเข้า",
+        "เงินฝาก",
+        "รับเงิน",
+        "โอนเงินเข้า",
+        "รับเงินพร้อมเพย์",
+        "รับเงินโอน",
+        "เงินฝากเข้า",
+        "deposit",
+        "receive",
+        "transfer in",
+        "transfer received"
+      ]
+    },
+    "cardRules": {
+      "includeKeywords": [
+        "credit card",
+        "บัตรเครดิต",
+        "card spending",
+        "card payment",
+        "card transaction",
+        "ใช้จ่ายบัตร",
+        "ยอดใช้จ่าย"
+      ],
+      "excludeKeywords": ["a/c", "account", "บช"]
+    },
+    "cleaning": {
+      "minMerchantLength": 2,
+      "commonWords": [
+        "USING",
+        "VIA",
+        "THROUGH",
+        "BY",
+        "WITH",
+        "FOR",
+        "TO",
+        "FROM",
+        "AT",
+        "THE",
+        "ผ่าน",
+        "โดย",
+        "จาก",
+        "ที่",
+        "ไปยัง",
+        "ถึง"
+      ]
+    }
+  },
+  "fixtures": [
+    {
+      "name": "kbank spending english",
+      "sender": "KBank",
+      "receivedAt": "2026-06-09T10:00:00.000Z",
+      "body": "KBank: You spent 1,250.00 THB at SHOPEE. A/C x5678 Bal 8,430.20 THB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1250.00",
+          "merchant": "SHOPEE.",
+          "accountLast4": "5678",
+          "balance": "8430.20",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "kbank receive english",
+      "sender": "KBank",
+      "receivedAt": "2026-06-09T11:00:00.000Z",
+      "body": "KBank: Receive 10,000.00 THB from A/C x5678 Bal 18,430.20 THB",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "10000.00",
+          "accountLast4": "5678",
+          "balance": "18430.20",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "kbank promptpay transfer thai",
+      "sender": "KBank",
+      "receivedAt": "2026-06-09T12:00:00.000Z",
+      "body": "KBank: โอนเงินผ่านพร้อมเพย์ 500.00 บาท บช x5678 คงเหลือ 17,930.20 บาท",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "500.00",
+          "accountLast4": "5678",
+          "balance": "17930.20",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "kbank credit card spending with available limit",
+      "sender": "KASIKORNBANK",
+      "receivedAt": "2026-06-09T13:00:00.000Z",
+      "body": "KBank: Credit card spending 2,300.00 THB at CENTRAL DEPT STORE Available limit 45,000.00 THB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2300.00",
+          "merchant": "CENTRAL DEPT STORE",
+          "creditLimit": "45000.00",
+          "transactionType": "CREDIT",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "kbank thai deposit",
+      "sender": "KBank",
+      "receivedAt": "2026-06-09T14:00:00.000Z",
+      "body": "KBank: เงินเข้า 4,200.00 บาท บช x5678 คงเหลือ 21,000.00 บาท",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "4200.00",
+          "accountLast4": "5678",
+          "balance": "21000.00",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "KBank",
+      "receivedAt": "2026-06-09T15:00:00.000Z",
+      "body": "KBank: Your OTP is 123456 for online login. Do not share this code with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "promotional message is filter-rejected",
+      "sender": "KBank",
+      "receivedAt": "2026-06-09T16:00:00.000Z",
+      "body": "KBank: Special promotion! Get a cashback offer up to 5% when you spend 1,000.00 THB with your card this month.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

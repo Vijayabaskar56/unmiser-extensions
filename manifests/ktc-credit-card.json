@@ -1,0 +1,261 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro KTCCreditCardParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/KTCCreditCardParser.kt), which extends BaseThailandBankParser. KTC (Krungthai Card) is a Thai credit-card issuer: the Kotlin parser forces isFromCard = true, extracts the available credit limit, and defaults the transaction type to CREDIT when the shared Thai keyword classifier finds nothing. Transaction-type priority in Kotlin is credit > expense > income (first-match `when`); replicated here in the pipeline by writing in reverse priority order so the last (highest priority) setFieldWhen wins."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "th.ktc.card",
+    "type": "sms-parser",
+    "name": "KTC",
+    "country": "TH",
+    "currency": "THB",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["KTC"],
+      "dltPatterns": ["^.*KRUNGTHAI CARD.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "รหัส",
+        "ยืนยัน",
+        "สมัคร",
+        "โปรโมชั่น",
+        "promotion",
+        "cashback offer"
+      ],
+      "requireAnyKeyword": [
+        "เงินเข้า",
+        "เงินออก",
+        "ถอนเงิน",
+        "โอนเงิน",
+        "ใช้จ่าย",
+        "เงินฝาก",
+        "รับเงิน",
+        "คงเหลือ",
+        "บาท",
+        "ยอดใช้จ่าย",
+        "withdrawal",
+        "deposit",
+        "transfer",
+        "payment",
+        "spent",
+        "receive",
+        "bal",
+        "thb",
+        "card transaction",
+        "card payment",
+        "credit card spending",
+        "available limit"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:THB|฿)\\s*(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*USD"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "(?:at|ร้าน)\\s+(?<value>[A-Za-z0-9\\s&._-]+?)(?:\\s+(?:A/C|บช|Bal|คงเหลือ|Available|on|$))"
+        },
+        {
+          "re": "at\\s+(?<value>[A-Za-z0-9\\s&._-]+)$"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/C|บช)\\s*x(?<value>\\d{4})"
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "(?:Available limit|วงเงินคงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        }
+      ]
+    },
+    "cleaning": {
+      "minMerchantLength": 2,
+      "commonWords": ["ผ่าน", "โดย", "จาก", "ที่", "ไปยัง", "ถึง"]
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {},
+        "field": "transactionType",
+        "value": "CREDIT"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": [
+            "เงินเข้า",
+            "เงินฝาก",
+            "รับเงิน",
+            "โอนเงินเข้า",
+            "deposit",
+            "receive",
+            "transfer in",
+            "transfer received"
+          ]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": [
+            "เงินออก",
+            "ถอนเงิน",
+            "โอนเงินออก",
+            "โอนเงินผ่าน",
+            "ใช้จ่ายบัตร",
+            "ใช้จ่าย",
+            "withdrawal",
+            "payment",
+            "you spent",
+            "transfer out",
+            "card payment",
+            "card transaction",
+            "atm withdrawal"
+          ]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credit card spending", "ยอดใช้จ่ายต่างประเทศ", "ยอดใช้จ่าย"]
+        },
+        "field": "transactionType",
+        "value": "CREDIT"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {},
+        "field": "isFromCard",
+        "value": true
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "english credit card spending with merchant and available limit",
+      "sender": "KTC",
+      "receivedAt": "2026-01-21T14:32:00.000Z",
+      "body": "KTC: Credit card spending 2,999.00 THB at LAZADA Available limit 47,001.00 THB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2999.00",
+          "merchant": "LAZADA",
+          "transactionType": "CREDIT",
+          "creditLimit": "47001.00",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "thai international spending in USD",
+      "sender": "KTC",
+      "receivedAt": "2026-01-22T09:15:00.000Z",
+      "body": "KTC: ยอดใช้จ่ายต่างประเทศ 120.50 USD",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "120.50",
+          "transactionType": "CREDIT",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "thai card spending with merchant and balance",
+      "sender": "KTC",
+      "receivedAt": "2026-02-03T18:40:00.000Z",
+      "body": "KTC: ใช้จ่ายบัตร 1,250.00 บาท ร้าน BIG C คงเหลือ 15,820.45 บาท",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1250.00",
+          "merchant": "BIG C",
+          "balance": "15820.45",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "english card payment with account and balance",
+      "sender": "KTC",
+      "receivedAt": "2026-02-10T12:05:00.000Z",
+      "body": "KTC: Card payment 850.00 THB at STARBUCKS A/C x5678 Bal 12,000.00 THB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "850.00",
+          "merchant": "STARBUCKS",
+          "accountLast4": "5678",
+          "balance": "12000.00",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "KTC",
+      "receivedAt": "2026-02-11T08:00:00.000Z",
+      "body": "KTC: OTP 123456 for your online card transaction. Do not share this code with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "promotional message is filter-rejected",
+      "sender": "KTC",
+      "receivedAt": "2026-02-12T10:00:00.000Z",
+      "body": "KTC: Special promotion! Get 5% cashback offer on all card payments this month.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

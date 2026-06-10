@@ -1,0 +1,318 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro SaraswatBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/SaraswatBankParser.kt). Formats: \"Your A/c no. NNNN is credited with INR X on DATE towards ACH Credit:MERCHANT. Current Bal is INR Y CR - Saraswat Bank\" and \"Dear Customer, Your account no. ending with NNNN is debited with INR X on DATE for S.I./NEFT/RTGS/IMPS. Current Bal is INR YCR. - Saraswat Bank\". The Kotlin \"for X\" merchant aliases (S.I -> Standing Instruction, NEFT -> NEFT Transfer, ...) and the ATM fallback are ported as pipeline steps."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.saraswat.bank",
+    "type": "sms-parser",
+    "name": "Saraswat Co-operative Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["SARBNK", "SARASWAT", "SARASWATBANK"],
+      "dltPatterns": [
+        "^[A-Z]{2}-SARBNK-[ST]$",
+        "^[A-Z]{2}-SARASWAT-[ST]$",
+        "^[A-Z]{2}-SARBNK$",
+        "^[A-Z]{2}-SARASWAT$"
+      ]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid"
+      ],
+      "requireAnyKeyword": [
+        "is credited with",
+        "is debited with",
+        "credited with inr",
+        "debited with inr",
+        "current bal is",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "INR\\s+(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "towards\\s+(?<value>.+?)(?:\\.\\s*Current|\\s*Current|$)"
+        },
+        {
+          "re": "for\\s+(?<value>[A-Z.]+?)(?:\\.\\s+Current|\\s+Current|$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Current\\s+Bal\\s+is\\s+INR\\s+(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)\\s*(?:CR|DR)?"
+        },
+        {
+          "re": "Bal[:\\s]+Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "A/c\\s+no\\.\\s+(?:ending\\s+with\\s+)?(?<value>\\d{4,6})",
+          "takeLast4": true
+        },
+        {
+          "re": "account\\s+no\\.\\s+ending\\s+with\\s+(?<value>\\d{4,6})",
+          "takeLast4": true
+        },
+        {
+          "re": "A/c\\s+\\*(?<value>\\d{4})"
+        }
+      ]
+    },
+    "typeRules": {
+      "income": ["is credited", "credited with"],
+      "expense": ["is debited", "debited with", "withdrawn"]
+    },
+    "cleaning": {
+      "stripPatterns": ["^ACH\\s+Credit:\\s*", "^ACH\\s+Debit:\\s*"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["ATM", "withdrawn"],
+          "notContainsAny": ["towards"]
+        },
+        "field": "merchant",
+        "value": "ATM Withdrawal"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["for S.I.", "for SI."]
+        },
+        "field": "merchant",
+        "value": "Standing Instruction"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["for NEFT"]
+        },
+        "field": "merchant",
+        "value": "NEFT Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["for RTGS"]
+        },
+        "field": "merchant",
+        "value": "RTGS Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["for IMPS"]
+        },
+        "field": "merchant",
+        "value": "IMPS Transfer"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "ach credit transaction",
+      "sender": "JD-SARBNK-S",
+      "receivedAt": "2025-10-13T10:00:00.000Z",
+      "body": "Your A/c no. 1234 is credited with INR 100.50 on 13-10-2025 towards ACH Credit:MERCHANT NAME. Current Bal is INR 950.00 CR  - Saraswat Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100.50",
+          "merchant": "MERCHANT NAME",
+          "accountLast4": "1234",
+          "balance": "950.00",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "standing instruction debit",
+      "sender": "JD-SARBNK-S",
+      "receivedAt": "2025-09-25T10:00:00.000Z",
+      "body": "Dear Customer, Your account no. ending with 5678 is debited with INR 1,000.00 on 25-09-2025  for S.I. Current Bal is INR 8,500.00CR. - Saraswat Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1000.00",
+          "merchant": "Standing Instruction",
+          "accountLast4": "5678",
+          "balance": "8500.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "simple credit transaction",
+      "sender": "SARBNK",
+      "receivedAt": "2025-11-01T10:00:00.000Z",
+      "body": "Your A/c no. 9012 is credited with INR 500.00 on 01-11-2025 towards Salary. Current Bal is INR 15,000.00 CR - Saraswat Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "Salary",
+          "accountLast4": "9012",
+          "balance": "15000.00",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "large amount neft debit",
+      "sender": "AD-SARBNK-S",
+      "receivedAt": "2025-10-15T10:00:00.000Z",
+      "body": "Dear Customer, Your account no. ending with 3456 is debited with INR 25,000.00 on 15-10-2025 for NEFT. Current Bal is INR 50,000.00CR. - Saraswat Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25000.00",
+          "merchant": "NEFT Transfer",
+          "accountLast4": "3456",
+          "balance": "50000.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "small amount credit",
+      "sender": "SARASWAT",
+      "receivedAt": "2025-10-20T10:00:00.000Z",
+      "body": "Your A/c no. 7890 is credited with INR 10.00 on 20-10-2025 towards Cashback. Current Bal is INR 1,200.50 CR - Saraswat Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "10.00",
+          "merchant": "Cashback",
+          "accountLast4": "7890",
+          "balance": "1200.50",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "rtgs transfer debit",
+      "sender": "JD-SARBNK-S",
+      "receivedAt": "2025-10-22T10:00:00.000Z",
+      "body": "Dear Customer, Your account no. ending with 2468 is debited with INR 50,000.00 on 22-10-2025 for RTGS. Current Bal is INR 100,000.00CR. - Saraswat Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "50000.00",
+          "merchant": "RTGS Transfer",
+          "accountLast4": "2468",
+          "balance": "100000.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "imps transfer debit",
+      "sender": "BV-SARBNK-S",
+      "receivedAt": "2025-10-23T10:00:00.000Z",
+      "body": "Dear Customer, Your account no. ending with 1357 is debited with INR 2,500.00 on 23-10-2025 for IMPS. Current Bal is INR 12,345.67CR. - Saraswat Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2500.00",
+          "merchant": "IMPS Transfer",
+          "accountLast4": "1357",
+          "balance": "12345.67",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "refund credit via alternative sender",
+      "sender": "SARASWATBANK",
+      "receivedAt": "2025-10-24T10:00:00.000Z",
+      "body": "Your A/c no. 9753 is credited with INR 750.00 on 24-10-2025 towards Refund. Current Bal is INR 5,000.00 CR - Saraswat Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "750.00",
+          "merchant": "Refund",
+          "accountLast4": "9753",
+          "balance": "5000.00",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "standing instruction debit without dots",
+      "sender": "SARBNK",
+      "receivedAt": "2025-01-02T10:00:00.000Z",
+      "body": "Dear Customer, Your account no. ending with 5678 is debited with INR 500.00 on 02-01-2025 for SI. Current Bal is INR 2,000.00CR. - Saraswat Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "Standing Instruction",
+          "accountLast4": "5678",
+          "balance": "2000.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal (synthesized from kotlin pattern 3)",
+      "sender": "JD-SARBNK-S",
+      "receivedAt": "2025-10-12T10:00:00.000Z",
+      "body": "INR 2,000.00 withdrawn from your A/c no. 4321 at ATM on 12-10-2025. Current Bal is INR 5,000.00 CR - Saraswat Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2000.00",
+          "merchant": "ATM Withdrawal",
+          "accountLast4": "4321",
+          "balance": "5000.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "JD-SARBNK-S",
+      "receivedAt": "2025-10-10T10:00:00.000Z",
+      "body": "Your OTP for Saraswat Bank Net Banking login is 482913. Do not share it with anyone. - Saraswat Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

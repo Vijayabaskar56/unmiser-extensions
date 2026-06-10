@@ -1,0 +1,236 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro CanaraBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/CanaraBankParser.kt) plus the BankParser.kt base-class fallbacks it delegates to via super: the generic Rs/INR amount patterns, to/from/at/for merchant patterns, generic Ref/Txn reference pattern, A/c-with-mask account pattern and the Bal/Avl Bal balance patterns. Canara's two specific formats are the UPI \"Rs.X paid thru A/C XX1234 ... to MERCHANT, UPI Ref N\" message and the \"INR X has been DEBITED/CREDITED ... Total Avail.bal INR Y\" ledger alert. No original Kotlin tests exist for Canara, so fixtures are synthesized from the parser's regexes and doc comments."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.canara.bank",
+    "type": "sms-parser",
+    "name": "Canara Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["CANBNK", "CANARA"],
+      "dltPatterns": ["^.*CANBNK.*$", "^.*CANARA.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "failed due to",
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)\\s+paid"
+        },
+        {
+          "re": "INR\\s+(?<value>[\\d,]+(?:\\.\\d{2})?)\\s+has\\s+been\\s+DEBITED"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "\\sto\\s+(?<value>[^,]+?)(?:,\\s*UPI|\\.|-Canara)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Total\\s+)?Avail\\.?bal\\s+INR\\s+(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "UPI\\s+Ref\\s+(?<value>\\d+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:account|A/C)\\s+(?:XX|X\\*+)?(?<value>\\d{3,4})",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "nsccl",
+        "clearing corporation",
+        "groww",
+        "zerodha",
+        "upstox",
+        "smallcase",
+        "mutual fund",
+        "sip",
+        "demat",
+        "ipo",
+        "folio",
+        "nsdl",
+        "cdsl"
+      ],
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["credited", "deposited", "received", "refund"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*",
+        "\\s+on\\s+\\d{2}.*",
+        "\\s+UPI.*",
+        "\\s+at\\s+\\d{2}:\\d{2}.*",
+        "\\s*-\\s*$",
+        "(\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(\\s+LTD\\.?|\\s+LIMITED)$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["has been debited"]
+        },
+        "field": "merchant",
+        "value": "Canara Bank Debit"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "upi paid thru with merchant and ref",
+      "sender": "AD-CANBNK-S",
+      "receivedAt": "2025-08-08T16:41:00.000Z",
+      "body": "Rs.23.00 paid thru A/C XX1234 on 08-8-25 16:41:00 to BMTC BUS KA57F6, UPI Ref 523487654321. If not done by you, call 18004250018 -Canara Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "23.00",
+          "merchant": "BMTC BUS KA57F6",
+          "accountLast4": "1234",
+          "transactionType": "EXPENSE",
+          "reference": "523487654321"
+        }
+      }
+    },
+    {
+      "name": "generic ledger debit with avail balance",
+      "sender": "CANBNK",
+      "receivedAt": "2025-08-12T09:30:00.000Z",
+      "body": "INR 500.00 has been DEBITED from your account XXX123 on 12-08-2025 towards ECOM purchase. Total Avail.bal INR 1,092.62 - Canara Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "Canara Bank Debit",
+          "accountLast4": "123",
+          "balance": "1092.62",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "ledger credit with avail balance",
+      "sender": "CP-CANARA-S",
+      "receivedAt": "2026-06-01T11:00:00.000Z",
+      "body": "INR 25,000.00 has been CREDITED to your account XXX123 by NEFT from RAMESH KUMAR on 01-06-2026. Total Avail.bal INR 26,092.62 - Canara Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25000.00",
+          "merchant": "your account XXX123 by NEFT from RAMESH KUMAR",
+          "accountLast4": "123",
+          "balance": "26092.62",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "failed transaction is filter-rejected",
+      "sender": "AD-CANBNK-S",
+      "receivedAt": "2025-09-01T10:00:00.000Z",
+      "body": "Rs.100.00 paid thru A/C XX1234 failed due to insufficient balance. Please retry -Canara Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "CANBNK",
+      "receivedAt": "2025-09-02T10:00:00.000Z",
+      "body": "Your OTP for Canara Bank net banking login is 482910. Do not share it with anyone. -Canara Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

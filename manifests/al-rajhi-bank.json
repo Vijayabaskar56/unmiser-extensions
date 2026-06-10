@@ -1,0 +1,231 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro AlRajhiBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/AlRajhiBankParser.kt). Al Rajhi Bank (Saudi Arabia) sends Arabic-language SMS: purchase \"شراء ... بـSAR 5.75 لـMERCHANT\", ATM \"سحب:صراف آلي ... مبلغ:SAR 100 مكان السحب:LOCATION\", local/internal transfers (\"حوالة ... صادرة/واردة\"), loan installments (\"خصم: قسط تمويل ... القسط: 2304.58 SAR\") and bill payments (\"سداد فاتورة\"). Incoming direction is signalled by \"واردة\", which the Kotlin parser checks BEFORE any expense keyword — replicated here as a pipeline setFieldWhen because the engine's typeRules would otherwise test expense keywords first."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "sa.alrajhi.bank",
+    "type": "sms-parser",
+    "name": "Al Rajhi Bank",
+    "country": "SA",
+    "currency": "SAR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["AlRajhiBank"],
+      "dltPatterns": [".*RAJHI.*", ".*الراجحي.*"]
+    },
+    "filter": {
+      "excludeKeywords": ["رمز", "otp", "كلمة المرور"],
+      "requireAnyKeyword": ["شراء", "سحب", "حوالة", "خصم", "سداد", "SAR"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "بـSAR\\s+(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "مبلغ:\\s*SAR\\s+(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "القسط:\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)\\s*SAR"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "لـ(?<value>[^\\n*]+?)(?:\\n|\\d{2}/\\d|$)"
+        },
+        {
+          "re": "الى:(?<value>[^\\n*]+?)(?:\\n|الى:|الرسوم:|$)"
+        },
+        {
+          "re": "مكان السحب:(?<value>[^\\n]+?)(?:\\n|$)"
+        },
+        {
+          "re": "من:(?<value>[^\\n*]+?)(?:\\n|\\d{2}/\\d|$)"
+        },
+        {
+          "re": "من\\*+;(?<value>.+?)(?:\\n|\\d{2}/\\d|$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "المبلغ المتبقي:\\s*SAR\\s+(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["شراء", "سحب", "صادرة", "خصم", "سداد"]
+    },
+    "cardRules": {
+      "includeKeywords": [
+        "مدى",
+        "بطاقة",
+        "card ending",
+        "card xx",
+        "debit card",
+        "credit card",
+        "card no.",
+        "card number"
+      ],
+      "excludeKeywords": ["a/c", "saving account", "current account"]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s+PVT\\.?\\s+LTD\\.?$", "\\s+LTD\\.?$", "\\s*[-–]\\s*$"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["واردة"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["صراف آلي"],
+          "notContainsAny": ["مكان السحب"]
+        },
+        "field": "merchant",
+        "value": "ATM Withdrawal"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "card purchase via google pay",
+      "sender": "AlRajhiBank",
+      "receivedAt": "2026-03-09T16:46:00.000Z",
+      "body": "شراء\nعبر:****;مدى-جوجل باي\nبـSAR 5.75\nلـKiwi food suppl\n26/3/9 16:46",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5.75",
+          "merchant": "Kiwi food suppl",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "online purchase via mada",
+      "sender": "AlRajhiBank",
+      "receivedAt": "2026-03-06T04:06:00.000Z",
+      "body": "شراء انترنت\nعبر:****;مدى\nمن:****\nبـSAR 140\nلـbarq\n6/3/26 04:06",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "140",
+          "merchant": "barq",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal",
+      "sender": "AlRajhiBank",
+      "receivedAt": "2026-03-05T04:20:00.000Z",
+      "body": "سحب:صراف آلي\nبطاقة:****;مدى\nمبلغ:SAR 100\nمكان السحب:NORTHERN REGION\n5/3/26 04:20",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100",
+          "merchant": "NORTHERN REGION",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "outgoing local transfer",
+      "sender": "AlRajhiBank",
+      "receivedAt": "2026-03-03T22:44:00.000Z",
+      "body": "حوالة محلية صادرة\nمصرف:ANB\nمن:****\nمبلغ:SAR 100\nالى:BARQ SAFE ACCOUNT\nالى:****\nالرسوم:SAR 0.58\n26/3/3 22:44",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100",
+          "merchant": "BARQ SAFE ACCOUNT",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "incoming internal transfer",
+      "sender": "AlRajhiBank",
+      "receivedAt": "2026-03-01T09:00:00.000Z",
+      "body": "حوالة داخلية واردة\nبـSAR 1170\nلـ****\nمن****;Ahmad\n26/3/1 09:00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1170",
+          "merchant": "Ahmad",
+          "transactionType": "INCOME",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "loan installment deduction (no merchant)",
+      "sender": "AlRajhiBank",
+      "receivedAt": "2026-02-26T16:39:00.000Z",
+      "body": "خصم: قسط تمويل\nالقسط: 2304.58 SAR\nمن: ****\nالمبلغ المتبقي: SAR 13827.48\n26/2/26 16:39",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "2304.58",
+          "balance": "13827.48",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "incoming local transfer (salary)",
+      "sender": "AlRajhiBank",
+      "receivedAt": "2026-02-26T00:42:00.000Z",
+      "body": "حوالة محلية واردة\nعبر:SAUDI ARABIAN MONETARY AUTHORITY\nمبلغ:SAR 7714.80\nالى:****\nمن:ACME CORP\n26/2/26 00:42",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "7714.80",
+          "merchant": "ACME CORP",
+          "transactionType": "INCOME",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "outgoing internal transfer (masked recipient, no merchant)",
+      "sender": "AlRajhiBank",
+      "receivedAt": "2026-03-02T23:56:00.000Z",
+      "body": "حوالة داخلية صادرة\nمن****\nبـSAR 200\nلـ****; Ahmad\n26/3/2 23:56",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "200",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "otp verification message is filter-rejected",
+      "sender": "AlRajhiBank",
+      "receivedAt": "2026-03-10T10:00:00.000Z",
+      "body": "رمز التحقق الخاص بك هو 482913. لا تشارك هذا الرمز مع أي شخص.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

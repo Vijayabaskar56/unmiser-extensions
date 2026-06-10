@@ -1,0 +1,534 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro ICICIBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/ICICIBankParser.kt) plus the BankParser.kt base-class fallbacks (CompiledPatterns Amount / Merchant / Reference / Account / Balance lists) the Kotlin parser delegates to via super.extractX(...). Known deviations from the Kotlin parser (engine limitations): - Multi-currency cards (\"USD 11.80 spent\") cannot set a dynamic currency; the manifest currency is fixed at INR. - ACH/NACH dividend merchants are extracted without the appended \" Dividend\" suffix; AutoPay fallback yields \"AutoPay\" instead of the Kotlin canonical service labels (\"AutoPay Subscription\" etc.). - creditLimit is extracted for every message, not only CREDIT-typed ones."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.icici.bank",
+    "type": "sms-parser",
+    "name": "ICICI Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["ICICIB", "ICICIBANK"],
+      "dltPatterns": ["^.*ICICI.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid",
+        "cash deposit transaction",
+        "will be debited",
+        "has been received on your icici bank credit card"
+      ],
+      "requireAnyKeyword": [
+        "debited with",
+        "debited for",
+        "credited with",
+        "credited:",
+        "autopay",
+        "your account has been",
+        "inr",
+        "spent using",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "[A-Z]{3}\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+spent"
+        },
+        {
+          "re": "(?:Rs\\.?|INR)\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+spent"
+        },
+        {
+          "re": "debited\\s+with\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "debited\\s+for\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "credited\\s+with\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "credited:\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "on\\s+\\d{1,2}-\\w{3}-\\d{2}\\s+(?:at|on)\\s+(?<value>[^.]+?)(?:\\.|\\s+Avl|$)"
+        },
+        {
+          "re": "Info\\s+(?:ACH|NACH)\\*(?<value>[^*]+)\\*"
+        },
+        {
+          "re": "towards\\s+(?<value>[^.\\n]+?)\\s+for"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)\\.\\s*UPI"
+        },
+        {
+          "re": ";\\s*(?<value>[^.\\n]+?)\\s+credited\\.\\s*UPI"
+        },
+        {
+          "re": "\\b(?<value>AutoPay)\\b"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Available\\s+Balance\\s+is\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avl\\s+Bal\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Updated\\s+Bal[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "RRN\\s+(?<value>[A-Za-z0-9]+)"
+        },
+        {
+          "re": "UPI:(?<value>[A-Za-z0-9]+)"
+        },
+        {
+          "re": "transaction\\s+reference\\s+no\\.?(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "ICICI\\s+Bank\\s+Card\\s+[X*]*(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "ICICI\\s+Bank\\s+Account\\s+(?<value>[X*]*\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Acct\\s+(?<value>[X*]*\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account).*?(?<value>\\d{3,})(?:\\s|$)",
+          "takeLast4": true
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "Available\\s+limit\\s+Rs\\.(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avl\\s+Lmt:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avail\\s+Limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+Credit\\s+Limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:^|\\s)Limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "indian clearing corporation",
+        "nsccl",
+        "nse clearing",
+        "clearing corporation",
+        "nach",
+        "ecs",
+        "groww",
+        "zerodha",
+        "upstox",
+        "kuvera",
+        "paytm money",
+        "etmoney",
+        "smallcase",
+        "angel one",
+        "angel broking",
+        "5paisa",
+        "icici securities",
+        "icici direct",
+        "hdfc securities",
+        "kotak securities",
+        "motilal oswal",
+        "sharekhan",
+        "edelweiss",
+        "axis direct",
+        "sbi securities",
+        "mutual fund",
+        "elss",
+        "folio",
+        "demat",
+        "stockbroker",
+        "digital gold",
+        "sovereign gold",
+        "cdsl",
+        "nsdl"
+      ],
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["credited", "deposited", "received", "refund", "cashback"]
+    },
+    "cardRules": {
+      "excludeKeywords": [
+        "a/c",
+        "account",
+        "ac ",
+        "acc ",
+        "saving account",
+        "current account",
+        "savings a/c",
+        "current a/c"
+      ],
+      "includeKeywords": [
+        "card ending",
+        "card xx",
+        "debit card",
+        "credit card",
+        "card no.",
+        "card number",
+        "card *",
+        "card x"
+      ]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*$",
+        "\\s+on\\s+\\d{2}.*$",
+        "\\s+UPI.*$",
+        "\\s+at\\s+\\d{2}:\\d{2}.*$",
+        "\\s*-\\s*$",
+        "(?:\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)\\s*$",
+        "(?:\\s+LTD\\.?|\\s+LIMITED)\\s*$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["Info INF*", " SAL"]
+        },
+        "field": "merchant",
+        "value": "Salary"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["Info BY CASH"]
+        },
+        "field": "merchant",
+        "value": "Cash Deposit"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["Info BY CASH"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["icici bank credit card"],
+          "containsAny": ["spent", "debited"]
+        },
+        "field": "transactionType",
+        "value": "CREDIT"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["icici bank card", "spent"]
+        },
+        "field": "transactionType",
+        "value": "CREDIT"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "usd card purchase",
+      "sender": "JM-ICICIT-S",
+      "receivedAt": "2025-09-03T10:00:00.000Z",
+      "body": "USD 11.80 spent using ICICI Bank Card XX7004 on 03-Sep-25 on 1xJetBrains AI . Avl Limit: INR 17,95,899.53. If not you, call 1800 2662/SMS BLOCK 7004 to 9215676766.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "11.80",
+          "merchant": "1xJetBrains AI",
+          "accountLast4": "7004",
+          "transactionType": "CREDIT"
+        }
+      }
+    },
+    {
+      "name": "eur card purchase",
+      "sender": "JM-ICICIT-S",
+      "receivedAt": "2025-09-05T10:00:00.000Z",
+      "body": "EUR 50.00 spent using ICICI Bank Card XX1234 on 05-Sep-25 on Amazon DE. Avl Limit: INR 2,00,000.00. SMS BLOCK 1234 to 9215676766",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "50.00",
+          "merchant": "Amazon DE",
+          "accountLast4": "1234",
+          "transactionType": "CREDIT"
+        }
+      }
+    },
+    {
+      "name": "inr card purchase",
+      "sender": "JM-ICICIT-S",
+      "receivedAt": "2025-09-06T10:00:00.000Z",
+      "body": "INR 500.00 spent using ICICI Bank Card XX5678 on 06-Sep-25 on Swiggy. Avl Limit: INR 1,50,000.00.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "Swiggy",
+          "accountLast4": "5678",
+          "transactionType": "CREDIT"
+        }
+      }
+    },
+    {
+      "name": "future autopay notification is filter-rejected",
+      "sender": "AX-ICICIT-S",
+      "receivedAt": "2025-10-01T10:00:00.000Z",
+      "body": "Your account will be debited with Rs 649.00 on 03-Oct-25 towards Netflix Entertainment Ser for AutoPay MERCHANTMANDATE, RRN 421723106963-ICICI Bank.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "actual autopay debit",
+      "sender": "AX-ICICIT-S",
+      "receivedAt": "2025-10-03T10:00:00.000Z",
+      "body": "Your account has been debited with Rs 649.00 towards Netflix Entertainment Ser for AutoPay MERCHANTMANDATE. RRN 421723106963. Avl Bal Rs 10,000.00-ICICI Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "649.00",
+          "merchant": "Netflix Entertainment Ser",
+          "balance": "10000.00",
+          "reference": "421723106963",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "future debit emi notification is filter-rejected",
+      "sender": "AX-ICICIT-S",
+      "receivedAt": "2025-10-01T11:00:00.000Z",
+      "body": "Rs. 500.00 will be debited from your account on 05-Oct-25 for EMI payment",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "credit card bill payment is filter-rejected",
+      "sender": "AD-ICICIT-S",
+      "receivedAt": "2025-12-06T10:00:00.000Z",
+      "body": "Payment of Rs 26,266.00 has been received on your ICICI Bank Credit Card XX9006 through Bharat Bill Payment System on 06-DEC-25.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "cash deposit completion confirmation is filter-rejected",
+      "sender": "VM-ICICIT-S",
+      "receivedAt": "2025-08-12T10:00:00.000Z",
+      "body": "Cash deposit transaction of Rs 5,000.00 in ICICI Bank Account 1234XXXX1234 has been completed with transaction reference no.MCDA001746000000.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "regular debit with upi reference and updated balance",
+      "sender": "AX-ICICIT-S",
+      "receivedAt": "2025-10-01T12:00:00.000Z",
+      "body": "ICICI Bank Acct XX123 debited for Rs 500.00 on 01-Oct-25; merchant credited. UPI: 543210987654. Call 18002662 for dispute. Updated Bal: Rs 5,000.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "merchant",
+          "accountLast4": "123",
+          "reference": "543210987654",
+          "balance": "5000.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "regular debit bill payment without merchant",
+      "sender": "AX-ICICIT-S",
+      "receivedAt": "2025-10-02T12:00:00.000Z",
+      "body": "Rs. 1,000.00 has been debited from your account XX456 for bill payment. Avl Bal: Rs 3,000.00",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "1000.00",
+          "accountLast4": "456",
+          "balance": "3000.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "regular debit with reference and no merchant",
+      "sender": "AX-ICICIT-S",
+      "receivedAt": "2025-10-03T12:00:00.000Z",
+      "body": "Your account has been successfully debited with Rs 250.00. Reference: TXN123456789",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "250.00",
+          "reference": "TXN123456789",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "salary credit with INF narration",
+      "sender": "VM-ICICIT",
+      "receivedAt": "2025-02-28T10:00:00.000Z",
+      "body": "ICICI Bank Account XX566 credited:Rs. 18,832.00 on 28-Feb-25. Info INF*000169831922*IQBO SAL FE. Available Balance is Rs. 28,076.14.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "18832.00",
+          "merchant": "Salary",
+          "accountLast4": "566",
+          "balance": "28076.14",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "upi debit with merchant credited pattern",
+      "sender": "ICICIB",
+      "receivedAt": "2025-11-10T13:03:00.000Z",
+      "body": "ICICI Bank Acct XX051 debited for Rs 180.00 on 10-Nov-25; DINDUGAL ORIGIN credited. UPI:568069174081. Call 18002662 for dispute. SMS BLOCK 051 to 9215676766. 06:33 PM",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "180.00",
+          "merchant": "DINDUGAL ORIGIN",
+          "accountLast4": "051",
+          "reference": "568069174081",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "upi debit hotel saradhas",
+      "sender": "ICICIB",
+      "receivedAt": "2025-11-11T13:27:00.000Z",
+      "body": "ICICI Bank Acct XX051 debited for Rs 210.00 on 11-Nov-25; HOTEL SARADHAS credited. UPI:531517664120. Call 18002662 for dispute. SMS BLOCK 051 to 9215676766. 06:57 PM",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "210.00",
+          "merchant": "HOTEL SARADHAS",
+          "accountLast4": "051",
+          "reference": "531517664120",
+          "transactionType": "EXPENSE"
+        }
+      }
+    }
+  ]
+}

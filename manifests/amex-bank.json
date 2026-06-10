@@ -1,0 +1,245 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro AMEXBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/AMEXBankParser.kt) plus the BankParser.kt base-class fallbacks it delegates to (CompiledPatterns Amount/Merchant/Reference/Account/Balance). The original parser force-types every AMEX transaction as CREDIT (all spending on an AMEX charge card is a credit-card transaction); the always-on transactionType fallback in the pipeline reproduces that."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.amex.card",
+    "type": "sms-parser",
+    "name": "American Express",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["AMEX", "AMEXIN"],
+      "dltPatterns": [
+        "^[A-Z]{2}-AMEXIN-S$",
+        "^[A-Z]{2}-AMEX-S$",
+        "^[A-Z]{2}-AMEXIN-[TPG]$",
+        "^[A-Z]{2}-AMEX-[TPG]$",
+        "^[A-Z]{2}-AMEXIN$",
+        "^[A-Z]{2}-AMEX$",
+        "^.*AMEX.*$"
+      ]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "offer",
+        "reward",
+        "membership",
+        "statement",
+        "due date",
+        "otp",
+        "one time password",
+        "verification code",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "spent\\s+INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+on"
+        },
+        {
+          "re": "INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+spent"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "at\\s+(?<value>[^•\\n]+?)\\s+on\\s+\\d{1,2}\\s+\\w+"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "AMEX\\s+card\\s+\\*+\\s*(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "card\\s+ending\\s+(?<value>\\d{4})"
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "Reference\\s+Number[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "Available\\s+limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avl\\s+Lmt:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avail\\s+Limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+Credit\\s+Limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ]
+    },
+    "cardRules": {
+      "includeKeywords": ["card ending", "credit card", "debit card", "card *", "card x"],
+      "excludeKeywords": ["a/c", "account", "saving account", "current account"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*$",
+        "\\s+on\\s+\\d{2}.*$",
+        "\\s+UPI.*$",
+        "\\s+at\\s+\\d{2}:\\d{2}.*$",
+        "\\s*-\\s*$",
+        "(\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(\\s+LTD\\.?|\\s+LIMITED)$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "fallbackField",
+        "field": "transactionType",
+        "value": "CREDIT"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "spend alert with masked 5-digit card",
+      "sender": "TX-AMEXIN-S",
+      "receivedAt": "2025-08-20T11:30:00.000Z",
+      "body": "Alert: You've spent INR 1,017.70 on your AMEX card ** 91000 at VOUCHER PLAT on 20 August 2025",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1017.70",
+          "merchant": "VOUCHER PLAT",
+          "accountLast4": "1000",
+          "transactionType": "CREDIT",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "alternate amount-first spend with card ending",
+      "sender": "VM-AMEX-S",
+      "receivedAt": "2025-09-05T09:15:00.000Z",
+      "body": "INR 2,500.00 spent on your AMEX card ending 1005 at AMAZON IN on 5 September 2025. Not you? Call 1800-419-2122.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2500.00",
+          "merchant": "AMAZON IN",
+          "accountLast4": "1005",
+          "transactionType": "CREDIT",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "paid wording falls back to base INR amount pattern",
+      "sender": "AMEXIN",
+      "receivedAt": "2026-03-15T18:45:00.000Z",
+      "body": "You have paid INR 3,499.00 using your AMEX card ending 3009 at MAKEMYTRIP on 15 March 2026",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "3499.00",
+          "merchant": "MAKEMYTRIP",
+          "accountLast4": "3009",
+          "transactionType": "CREDIT",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "statement reminder is filter-rejected",
+      "sender": "TX-AMEXIN-P",
+      "receivedAt": "2026-06-01T08:00:00.000Z",
+      "body": "Your AMEX card statement is ready. Total amount payable INR 15,230.00. Due date 25 June 2026. Pay via the Amex app.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "membership reward promo is filter-rejected",
+      "sender": "VM-AMEXIN-T",
+      "receivedAt": "2026-05-10T10:00:00.000Z",
+      "body": "Earn 2X Membership Rewards points when you spend INR 5,000 on your AMEX card this month. T&C apply.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

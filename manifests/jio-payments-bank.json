@@ -1,0 +1,310 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro JioPaymentsBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/JioPaymentsBankParser.kt) plus the BankParser.kt base-class fallbacks it delegates to via super.*. Formats: \"JPB A/c x4288 ... credited with Rs.1670.00 ... UPI/CR/<ref>/<name>\", the matching \"debited with Rs. ... UPI/DR/<ref>/<name>\" debit, and the \"Rs. 1170.00 Sent from x4288\" money-transfer alert with \"Avl. Bal: Rs. X\". Kotlin type priority is credited > upi/cr > debited > upi/dr > sent from with FIRST match winning, so the setFieldWhen steps below run in reverse order (lowest priority first) because the LAST matching pipeline step wins."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.jiopayments.bank",
+    "type": "sms-parser",
+    "name": "Jio Payments Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["JIOPBS"],
+      "dltPatterns": ["^[A-Z]{2}-JIOPBS.*$", "JIOPBS"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "jpb a/c",
+        "upi/cr",
+        "upi/dr",
+        "sent from",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "credited\\s+with\\s+Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)\\s+Sent\\s+from"
+        },
+        {
+          "re": "debited\\s+with\\s+Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "UPI/(?:CR|DR)/\\d+/(?<value>[^.\\n]+?)(?:\\s*\\.|$)"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Avl\\.?\\s*Bal:\\s*Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "UPI/(?:CR|DR)/(?<value>\\d+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "JPB\\s+A/c\\s+x(?<value>\\d{4})"
+        },
+        {
+          "re": "from\\s+x(?<value>\\d{4})"
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "nsccl",
+        "clearing corporation",
+        "nach",
+        "groww",
+        "zerodha",
+        "upstox",
+        "mutual fund",
+        "sip",
+        "elss",
+        "demat",
+        "smallcase",
+        "nsdl",
+        "cdsl"
+      ],
+      "expense": ["withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["deposited", "received", "refund", "cashback"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*",
+        "\\s+on\\s+\\d{2}.*",
+        "\\s+UPI.*",
+        "\\s+at\\s+\\d{2}:\\d{2}.*",
+        "\\s*-\\s*$",
+        "(\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(\\s+LTD\\.?|\\s+LIMITED)$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["sent from"],
+          "notContainsAny": ["upi/cr", "upi/dr"]
+        },
+        "field": "merchant",
+        "value": "Money Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["sent from"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["upi/dr"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["debited"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["upi/cr"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credited"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "upi credit with merchant and balance",
+      "sender": "JM-JIOPBS-S",
+      "receivedAt": "2026-05-12T10:15:00.000Z",
+      "body": "Your JPB A/c x4288 is credited with Rs.1670.00 on 12-05-26 by UPI/CR/700003371002/AMAN KU. Avl. Bal: Rs. 9095.5 -Jio Payments Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1670.00",
+          "merchant": "AMAN KU",
+          "accountLast4": "4288",
+          "balance": "9095.5",
+          "reference": "700003371002",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "upi debit with merchant and balance",
+      "sender": "JD-JIOPBS-S",
+      "receivedAt": "2026-05-14T18:42:00.000Z",
+      "body": "Your JPB A/c x4288 is debited with Rs. 1750.00 on 14-05-26 by UPI/DR/520300007125/AMAN KUM. Avl. Bal: Rs. 7345.5 -Jio Payments Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1750.00",
+          "merchant": "AMAN KUM",
+          "accountLast4": "4288",
+          "balance": "7345.5",
+          "reference": "520300007125",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "money transfer sent from jpb account",
+      "sender": "JM-JIOPBS-S",
+      "receivedAt": "2026-05-16T09:05:00.000Z",
+      "body": "Rs. 1170.00 Sent from your JPB A/c x4288 on 16-05-26. Avl. Bal: Rs. 6175.5. Not you? Call 1800-891-9999 -Jio Payments Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1170.00",
+          "merchant": "Money Transfer",
+          "accountLast4": "4288",
+          "balance": "6175.5",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "money transfer with bare from x account mask",
+      "sender": "JIOPBS",
+      "receivedAt": "2026-05-18T13:30:00.000Z",
+      "body": "Rs. 500.00 Sent from x4288. Avl. Bal: Rs. 5675.5 -Jio Payments Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "Money Transfer",
+          "accountLast4": "4288",
+          "balance": "5675.5",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "JM-JIOPBS-S",
+      "receivedAt": "2026-05-20T08:00:00.000Z",
+      "body": "Your OTP for Jio Payments Bank login is 482913. Do not share it with anyone -Jio Payments Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "payment request is filter-rejected",
+      "sender": "JD-JIOPBS-S",
+      "receivedAt": "2026-05-21T11:20:00.000Z",
+      "body": "AMAN KUMAR has requested Rs. 250.00 from your JPB A/c x4288 via UPI. Approve only if you know the requester -Jio Payments Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

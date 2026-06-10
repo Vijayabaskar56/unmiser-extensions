@@ -1,0 +1,183 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro JioPayParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/JioPayParser.kt) extended with the Tamil-locale recharge format observed in real device scans (\"வெற்றிகரமாக ரீசார்ஜ் செய்யப்பட்டது!\" with \"திட்டத்தின் பெயர் : 899.00\"). Like the original, every JioPay wallet transaction is typed CREDIT so wallet spends aren't double-counted against the funding bank account."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.jio.jiopay",
+    "type": "sms-parser",
+    "name": "JioPay",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["JIOPAY", "JA-JIOPAY-S", "JM-JIOPAY"],
+      "dltPatterns": ["^[A-Z]{2}-JIOPAY.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "data usage",
+        "டேட்டா பயன்பாடு",
+        "முடிவடை",
+        "will be deducted",
+        "offer",
+        "discount"
+      ],
+      "requireAnyKeyword": [
+        "recharge successful",
+        "வெற்றிகரமாக ரீசார்ஜ்",
+        "payment successful",
+        "bill payment",
+        "credited",
+        "debited",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Plan\\s+Name\\s*:\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "திட்டத்தின் பெயர்\\s*:\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "payment\\s+successful\\s+to\\s+(?<value>[^.\\n]+)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "Transaction\\s+ID\\s*:\\s*(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "டிரான்ஸாக்சன் ஐடி\\s*:\\s*(?<value>[A-Za-z0-9]+)"
+        }
+      ]
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["bill payment"]
+        },
+        "field": "merchant",
+        "value": "Bill Payment"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["bill payment", "electricity"]
+        },
+        "field": "merchant",
+        "value": "Electricity Bill"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["bill payment", "water"]
+        },
+        "field": "merchant",
+        "value": "Water Bill"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["bill payment", "gas"]
+        },
+        "field": "merchant",
+        "value": "Gas Bill"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["bill payment", "broadband"]
+        },
+        "field": "merchant",
+        "value": "Broadband Bill"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["recharge successful", "வெற்றிகரமாக ரீசார்ஜ்"]
+        },
+        "field": "merchant",
+        "value": "Jio Recharge"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "merchant",
+        "value": "JioPay Transaction"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "transactionType",
+        "value": "CREDIT"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "accountLast4",
+        "value": "0000"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "english recharge confirmation",
+      "sender": "JA-JioPay-S",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Recharge Successful! Plan Name : 249.00 Jio Number : 9876543210 Benefits: Unlimited Voice, 1.5GB/Day. Validity - 28 Days Transaction ID : BR000CAUBYON",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "249.00",
+          "merchant": "Jio Recharge",
+          "transactionType": "CREDIT",
+          "reference": "BR000CAUBYON"
+        }
+      }
+    },
+    {
+      "name": "tamil recharge confirmation (observed device format)",
+      "sender": "JT-JioPay",
+      "receivedAt": "2026-03-27T21:54:00.000Z",
+      "body": "வெற்றிகரமாக ரீசார்ஜ் செய்யப்பட்டது! \nதிட்டத்தின் பெயர் : 899.00 \nJio எண் : 9876543210\nபலன்கள் : \nBenefits: Unlimited 5G data, 200GB (2GB/Day 4G data + 20GB 4G Data), Unlimited Voice, 100 SMS/Day & Subscription to Jio Apps. Validity - 90 Days\nடிரான்ஸாக்சன் ஐடி : BR000CLYXZIF",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "899.00",
+          "merchant": "Jio Recharge",
+          "transactionType": "CREDIT",
+          "reference": "BR000CLYXZIF"
+        }
+      }
+    },
+    {
+      "name": "tamil plan-expiry reminder is filter-rejected",
+      "sender": "JT-JIOPAY",
+      "receivedAt": "2026-03-27T21:54:00.000Z",
+      "body": "ரீசார்ஜ் திட்டம் 27-Mar-26 21:54 Hrs அன்று முடிவடைந்துவிட்டது !\nJio எண் : 9876543210\nதிட்டத்தின் பெயர்: Rs899_90D_2GB/D_20GB\nஎந்தவித கூடுதல் கட்டணமும் இல்லாமல் MyJio ஐப் பயன்படுத்தி ரீசார்ஜ் செய்யுங்கள்.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "data usage alert is filter-rejected",
+      "sender": "JT-JioPay",
+      "receivedAt": "2026-05-01T23:15:00.000Z",
+      "body": "Data usage Alert!\n50% of your daily data used as of 01-May-26 23:15\nJio Number: 9876543210\nDaily Quota: 2 GB\nFor data saving tips: http://tiny.jio.com/Savingasm",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

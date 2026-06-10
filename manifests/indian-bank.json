@@ -1,0 +1,442 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro IndianBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/IndianBankParser.kt) plus the BankParser.kt base-class fallbacks it delegates to via super.*: CompiledPatterns.Amount/Merchant/Reference/Account/Balance and the base isTransactionMessage skip list. Transaction-type classification is done entirely in the pipeline (not typeRules) because the Kotlin parser checks its own keywords (debited, withdrawn, \"upi payment\" without received, credited, deposited, received) BEFORE falling back to the base class, whose investment-keyword check would otherwise outrank them under the engine's fixed typeRules priority. The pipeline steps run in reverse priority order so each later (higher-priority) match overwrites earlier ones, reproducing Kotlin's first-match-wins order."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.indianbank.bank",
+    "type": "sms-parser",
+    "name": "Indian Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["INDBNK", "INDIAN"],
+      "dltPatterns": [
+        "INDIAN BANK",
+        "INDIANBANK",
+        "INDIANBK",
+        "^[A-Z]{2}-INDBNK-[STPG]$",
+        "^[A-Z]{2}-INDBNK$"
+      ]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid",
+        "payment"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "debited\\s+Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "credited\\s+Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)\\s+credited\\s+to"
+        },
+        {
+          "re": "withdrawn\\s+Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "UPI\\s+payment\\s+of\\s+Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\.\\s*UPI:|UPI:|$)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\.\\s*UPI:|UPI:|$)"
+        },
+        {
+          "re": "VPA\\s+(?<value>[\\w.-]+)@\\w+"
+        },
+        {
+          "re": "(?<value>ATM\\s+(?:withdrawal\\s+)?at\\s+[^.\\n]+?)(?:\\s+on|$)"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Bal\\s+Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+Balance:?\\s+Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "UPI:(?<value>\\d+)"
+        },
+        {
+          "re": "UPI\\s+Ref\\s+no\\s+(?<value>\\d+)"
+        },
+        {
+          "re": "Ref\\s+No\\.?\\s*(?<value>\\w+)"
+        },
+        {
+          "re": "Transaction\\s+ID:?\\s*(?<value>\\w+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        },
+        {
+          "re": "Reference\\s+Number[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "A/c\\s+\\*(?<value>\\d{4})"
+        },
+        {
+          "re": "Account\\s+X*(?<value>\\d{4})"
+        },
+        {
+          "re": "A/c\\s+ending\\s+(?<value>\\d{4})"
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "cardRules": {
+      "excludeKeywords": [
+        "a/c",
+        "account",
+        "ac ",
+        "acc ",
+        "saving account",
+        "current account",
+        "savings a/c",
+        "current a/c"
+      ],
+      "includeKeywords": [
+        "card ending",
+        "card xx",
+        "debit card",
+        "credit card",
+        "card no.",
+        "card number",
+        "card *",
+        "card x"
+      ]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*$",
+        "\\s+on\\s+\\d{2}.*$",
+        "\\s+UPI.*$",
+        "\\s+at\\s+\\d{2}:\\d{2}.*$",
+        "\\s*-\\s*$",
+        "\\s+PVT\\.?\\s*LTD\\.?$",
+        "\\s+PRIVATE\\s+LIMITED$",
+        "\\s+LTD\\.?$",
+        "\\s+LIMITED$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["cashback"],
+          "notContainsAny": ["earn cashback"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["refund"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["spent", "charged", "paid", "purchase", "deducted"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": [
+            "iccl",
+            "indian clearing corporation",
+            "nsccl",
+            "nse clearing",
+            "clearing corporation",
+            "nach",
+            "ach",
+            "ecs",
+            "groww",
+            "zerodha",
+            "upstox",
+            "kite",
+            "kuvera",
+            "paytm money",
+            "etmoney",
+            "coin by zerodha",
+            "smallcase",
+            "angel one",
+            "angel broking",
+            "5paisa",
+            "icici securities",
+            "icici direct",
+            "hdfc securities",
+            "kotak securities",
+            "motilal oswal",
+            "sharekhan",
+            "edelweiss",
+            "axis direct",
+            "sbi securities",
+            "mutual fund",
+            "sip",
+            "elss",
+            "ipo",
+            "folio",
+            "demat",
+            "stockbroker",
+            "digital gold",
+            "sovereign gold",
+            "nse",
+            "bse",
+            "cdsl",
+            "nsdl"
+          ]
+        },
+        "field": "transactionType",
+        "value": "INVESTMENT"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credited", "deposited", "received"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["upi payment"],
+          "notContainsAny": ["received"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["debited", "withdrawn"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "upi credit with VPA",
+      "sender": "BV-INDBNK-S",
+      "receivedAt": "2025-10-07T10:15:00.000Z",
+      "body": "Rs.2.00 credited to a/c *8175 on 07/10/2025 by a/c linked to VPA poweraccess.paytm3@axisbank (UPI Ref no 981408452805).Indian Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2.00",
+          "merchant": "poweraccess.paytm3",
+          "accountLast4": "8175",
+          "transactionType": "INCOME",
+          "reference": "981408452805"
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal",
+      "sender": "INDBNK",
+      "receivedAt": "2025-10-09T12:00:00.000Z",
+      "body": "Rs. 2000 withdrawn from ATM at MAIN STREET BRANCH on 09/10/2025.Indian Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2000",
+          "merchant": "ATM at MAIN STREET BRANCH",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "cash deposit",
+      "sender": "INDBNK",
+      "receivedAt": "2025-10-10T09:30:00.000Z",
+      "body": "Rs. 5000.00 deposited to a/c *8175 on 10/10/2025.Indian Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "merchant": "a/c *8175",
+          "accountLast4": "8175",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "large upi credit with VPA",
+      "sender": "BV-INDBNK-S",
+      "receivedAt": "2025-10-11T16:45:00.000Z",
+      "body": "Rs.15000.00 credited to a/c *1234 on 11/10/2025 by a/c linked to VPA customer@paytm (UPI Ref no 555444333222).Indian Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "15000.00",
+          "merchant": "customer",
+          "accountLast4": "1234",
+          "transactionType": "INCOME",
+          "reference": "555444333222"
+        }
+      }
+    },
+    {
+      "name": "small amount credit",
+      "sender": "BV-INDBNK-S",
+      "receivedAt": "2025-10-12T08:05:00.000Z",
+      "body": "Rs.1.50 credited to a/c *5678 on 12/10/2025 by a/c linked to VPA reward@gpay (UPI Ref no 111222333444).Indian Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1.50",
+          "merchant": "reward",
+          "accountLast4": "5678",
+          "transactionType": "INCOME",
+          "reference": "111222333444"
+        }
+      }
+    },
+    {
+      "name": "credit via INDIAN sender",
+      "sender": "INDIAN",
+      "receivedAt": "2025-10-13T11:20:00.000Z",
+      "body": "Rs.100.00 credited to a/c *9012 on 13/10/2025.Indian Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100.00",
+          "merchant": "a/c *9012",
+          "accountLast4": "9012",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "upi payment debit with merchant and ref",
+      "sender": "AD-INDBNK-S",
+      "receivedAt": "2025-10-14T18:40:00.000Z",
+      "body": "UPI payment of Rs. 500.00 to Swiggy. UPI:515314436916",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "Swiggy",
+          "transactionType": "EXPENSE",
+          "reference": "515314436916"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "AD-INDBNK-T",
+      "receivedAt": "2025-10-15T07:00:00.000Z",
+      "body": "Your OTP for Indian Bank Net Banking is 482910. Valid for 10 mins. Do not share it with anyone. -Indian Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

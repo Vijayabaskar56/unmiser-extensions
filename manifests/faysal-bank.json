@@ -1,0 +1,224 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro FaysalBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/FaysalBankParser.kt). Faysal Bank (Pakistan) app notifications + SMS: outgoing IBFT (\"sent to\"), incoming RAAST/IBFT/FT (\"received ... from\"), debit card purchases, and ATM cash withdrawals. Known deviations from the Kotlin parser (see fixture comments): - Kotlin normalizes the Pakistani dot-as-thousands amount format (\"PKR 55.000.00\" -> 55000.00) by collapsing all but the last dot. The engine only strips commas and has no dot-collapsing transform, and a multi-dot amount string is not a valid decimal, so those bodies deliberately extract NO amount and surface as REVIEW/MISSING_AMOUNT rather than a wrong-magnitude value. Comma-formatted and plain amounts are normalized faithfully. - Kotlin requires \"pkr\" AND a transfer keyword in isTransactionMessage; the filter can only express the keyword OR-list. A non-PKR body with a keyword would fall through to MISSING_AMOUNT/REVIEW instead of REJECTED."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "pk.faysal.bank",
+    "type": "sms-parser",
+    "name": "Faysal Bank",
+    "country": "PK",
+    "currency": "PKR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["FBL", "8756", "FaysalBank", "com.avanza.ambitwizfbl"],
+      "dltPatterns": ["FAYSAL", "FBL", "^8756$"]
+    },
+    "filter": {
+      "requireAnyKeyword": [
+        "sent to",
+        "transfer",
+        "ibft",
+        "received",
+        "debit card purchase",
+        "atm cash withdrawal"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "PKR\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{1,2})?)(?![\\d.,])"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "debit card purchase at\\s+(?<value>.+?)\\s+from"
+        },
+        {
+          "re": "received\\s+(?:PKR\\s+[0-9.,]+\\s+)?(?:via\\s+\\w+\\s+)?from\\s+(?<value>[A-Za-z\\s.]+?)\\s+(?:A/C|IBAN)"
+        },
+        {
+          "re": "sent to\\s+(?<value>[A-Za-z.\\s]+?)\\s+A/C"
+        },
+        {
+          "re": "received from\\s+(?<value>[A-Za-z\\s.]+)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "Ref\\s*#?:?\\s*(?<value>[A-Za-z0-9-]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "[\\s\\S]*FBL\\s+A/C\\s*[*#Xx]+(?<value>\\d{4})"
+        },
+        {
+          "re": "[\\s\\S]*A/c\\s*#?\\s*[*#Xx]+(?<value>\\d{4})"
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": [
+        "debit card purchase",
+        "atm cash withdrawal",
+        "debited",
+        "withdrawn",
+        "spent",
+        "charged",
+        "paid",
+        "deducted",
+        "purchase"
+      ],
+      "income": ["received", "credited", "deposited", "refund"],
+      "transfer": ["sent to"]
+    },
+    "cardRules": {
+      "includeKeywords": ["debit card purchase"],
+      "excludeKeywords": []
+    },
+    "cleaning": {
+      "stripPatterns": ["\\*", ",", "\\s+PVT\\.?\\s+LTD\\.?$", "\\s+LTD\\.?$"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["atm cash withdrawal"]
+        },
+        "field": "merchant",
+        "value": "ATM Cash Withdrawal"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "merchant",
+        "value": "IBFT Transfer"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "outgoing IBFT with dot-thousands amount",
+      "sender": "com.avanza.ambitwizfbl",
+      "receivedAt": "2026-02-06T09:22:00.000Z",
+      "body": "PKR 55.000.00 sent to DEMO RECIPIENT A/C *9901 via IBFT from FBL A/C *1234 on 06-FEB-2026 02:22 PM Ref # 960855.",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_AMOUNT"],
+        "fields": {
+          "transactionType": "TRANSFER",
+          "merchant": "DEMO RECIPIENT",
+          "accountLast4": "1234",
+          "reference": "960855",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "incoming via RAAST",
+      "sender": "com.avanza.ambitwizfbl",
+      "receivedAt": "2026-02-06T11:22:00.000Z",
+      "body": "ACCOUNT HOLDER A/c # *1234 received PKR 500.00 via RAAST from SENDER ALIAS IBAN *3867 on 06-Feb-26 at 04:22 PM Ref#:121621592909 Info:111060606",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "transactionType": "INCOME",
+          "merchant": "SENDER ALIAS",
+          "accountLast4": "1234",
+          "reference": "121621592909"
+        }
+      }
+    },
+    {
+      "name": "incoming IBFT with comma amount",
+      "sender": "FBL",
+      "receivedAt": "2026-02-06T09:19:00.000Z",
+      "body": "PKR 250,000.00 received from ACME SERVICES  A/C *4388 in FBL A/C *1234 on 06/FEB/2026 at 02:19 PM",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "250000.00",
+          "transactionType": "INCOME",
+          "merchant": "ACME SERVICES",
+          "accountLast4": "1234"
+        }
+      }
+    },
+    {
+      "name": "debit card purchase",
+      "sender": "FBL",
+      "receivedAt": "2026-02-02T16:14:51.000Z",
+      "body": "PKR 16738.79 Debit Card purchase at Sample Delivery Karachi from FBL A/C *1234 on 02/FEB/2026 at 09:14:51 PM",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "16738.79",
+          "transactionType": "EXPENSE",
+          "merchant": "Sample Delivery Karachi",
+          "accountLast4": "1234",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "atm cash withdrawal",
+      "sender": "8756",
+      "receivedAt": "2026-02-01T09:52:00.000Z",
+      "body": "PKR 10,000.00 ATM cash withdrawal from FBL A/C *1234 on 01/FEB/2026 at 02:52 PM",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "10000.00",
+          "transactionType": "EXPENSE",
+          "merchant": "ATM Cash Withdrawal",
+          "accountLast4": "1234",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "incoming IBFT from another bank account",
+      "sender": "FBL",
+      "receivedAt": "2026-01-29T08:13:00.000Z",
+      "body": "PKR 135,327.46 received from Demo Sender BAFL A/C*2050 via IBFT in FBL A/C *1234 on 29/JAN/2026 at 01:13 PM",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "135327.46",
+          "transactionType": "INCOME",
+          "merchant": "Demo Sender BAFL",
+          "accountLast4": "1234"
+        }
+      }
+    },
+    {
+      "name": "incoming FT picks the LAST (receiver) account",
+      "sender": "FBL",
+      "receivedAt": "2026-01-05T09:44:00.000Z",
+      "body": "PKR 950,000.00 received from Demo Sender FBL A/C *4646 via FT in FBL A/C *4388 on 05/JAN/2026 at 02:44 PM",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "950000.00",
+          "transactionType": "INCOME",
+          "merchant": "Demo Sender FBL",
+          "accountLast4": "4388"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "FBL",
+      "receivedAt": "2026-02-10T10:00:00.000Z",
+      "body": "Dear Customer, your One Time Password for Faysal DigiBank login is 123456. Do not share it with anyone. FBL never asks for your OTP.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

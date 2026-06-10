@@ -1,0 +1,311 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro IDBIBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/IDBIBankParser.kt) plus the BankParser.kt base-class fallbacks the Kotlin parser delegates to (CompiledPatterns Amount/Merchant/Reference/Account/Balance). Documented formats: \"successfully debited with Rs 59.00\" (AutoPay/mandate), \"IDBI Bank Acct XX1234 debited for Rs 1040.00\" (UPI), credit narratives, and \"Bal Rs 3694.38\" balance lines. No original Kotlin tests exist for this parser, so fixtures are synthesized from the parser's regexes/doc comments."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.idbi.bank",
+    "type": "sms-parser",
+    "name": "IDBI Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["IDBIBK", "IDBIBANK"],
+      "dltPatterns": [
+        "^[A-Z]{2}-IDBIBK-S$",
+        "^[A-Z]{2}-IDBI-S$",
+        "^[A-Z]{2}-IDBIBK$",
+        "^[A-Z]{2}-IDBI$",
+        "^.*IDBI.*$"
+      ]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "debited\\s+with\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "debited\\s+for\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "credited\\s+with\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "towards\\s+(?<value>[^.\\n]+?)\\s+for"
+        },
+        {
+          "re": ";\\s*(?<value>[^.\\n]+?)\\s+credited\\."
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Bal\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "RRN\\s+(?<value>[A-Za-z0-9]+)"
+        },
+        {
+          "re": "UPI:(?<value>[A-Za-z0-9]+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "Acct\\s+(?:XX|X\\*+)?(?<value>\\d{3,4})",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account).*?(?<value>\\d+)(?:\\s|$)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "indian clearing corporation",
+        "nsccl",
+        "nse clearing",
+        "clearing corporation",
+        "nach",
+        "groww",
+        "zerodha",
+        "upstox",
+        "kuvera",
+        "paytm money",
+        "etmoney",
+        "smallcase",
+        "angel one",
+        "5paisa",
+        "icici securities",
+        "hdfc securities",
+        "kotak securities",
+        "motilal oswal",
+        "sharekhan",
+        "mutual fund",
+        "demat",
+        "stockbroker",
+        "digital gold",
+        "sovereign gold",
+        "cdsl",
+        "nsdl"
+      ],
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["credited", "deposited", "received", "refund", "cashback"]
+    },
+    "cardRules": {
+      "excludeKeywords": [
+        "a/c",
+        "account",
+        "ac ",
+        "acc ",
+        "saving account",
+        "current account",
+        "savings a/c",
+        "current a/c"
+      ],
+      "includeKeywords": [
+        "card ending",
+        "card xx",
+        "debit card",
+        "credit card",
+        "card no.",
+        "card number",
+        "card *",
+        "card x"
+      ]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*",
+        "\\s+on\\s+\\d{2}.*",
+        "\\s+UPI.*",
+        "\\s+at\\s+\\d{2}:\\d{2}.*",
+        "\\s*-\\s*$",
+        "(?:\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(?:\\s+LTD\\.?|\\s+LIMITED)$"
+      ],
+      "minMerchantLength": 2
+    }
+  },
+  "fixtures": [
+    {
+      "name": "autopay mandate debit with RRN and balance",
+      "sender": "AD-IDBIBK-S",
+      "receivedAt": "2026-06-01T08:12:00.000Z",
+      "body": "Your account XX5678 has been successfully debited with Rs 59.00 towards Google Play for UPI-Mandate. RRN 519766155631. Bal Rs 3694.38 -IDBI Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "59.00",
+          "merchant": "Google Play",
+          "accountLast4": "5678",
+          "transactionType": "EXPENSE",
+          "reference": "519766155631",
+          "balance": "3694.38"
+        }
+      }
+    },
+    {
+      "name": "upi debit with payee credited narrative",
+      "sender": "VM-IDBIBK-S",
+      "receivedAt": "2026-06-05T13:45:00.000Z",
+      "body": "IDBI Bank Acct XX1234 debited for Rs 1040.00 on 05-06-26; THALI RESTAURANT credited. UPI:521687538121. Bal Rs 12450.50. Report fraud to 18002094324 -IDBI Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1040.00",
+          "merchant": "THALI RESTAURANT",
+          "accountLast4": "1234",
+          "transactionType": "EXPENSE",
+          "reference": "521687538121",
+          "balance": "12450.50"
+        }
+      }
+    },
+    {
+      "name": "credit with payer narrative via base from-pattern",
+      "sender": "IDBIBK",
+      "receivedAt": "2026-06-02T09:30:00.000Z",
+      "body": "Your IDBI Bank Acct XX4321 is credited with Rs 25,000.00 from ACME CORP on 02-06-26. Bal Rs 30694.38 -IDBI Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25000.00",
+          "merchant": "ACME CORP",
+          "accountLast4": "4321",
+          "transactionType": "INCOME",
+          "balance": "30694.38"
+        }
+      }
+    },
+    {
+      "name": "investment payee classified as INVESTMENT",
+      "sender": "JD-IDBI-S",
+      "receivedAt": "2026-06-03T07:00:00.000Z",
+      "body": "Your account XX5678 has been successfully debited with Rs 5000.00 towards GROWW MUTUAL FUND for NACH-Mandate. RRN 519766155777. Bal Rs 1694.38 -IDBI Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "merchant": "GROWW MUTUAL FUND",
+          "accountLast4": "5678",
+          "transactionType": "INVESTMENT",
+          "reference": "519766155777",
+          "balance": "1694.38"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "AD-IDBIBK-S",
+      "receivedAt": "2026-06-04T10:00:00.000Z",
+      "body": "482910 is the OTP for your IDBI Bank net banking login. Do not share it with anyone. -IDBI Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "payment due reminder is filter-rejected",
+      "sender": "VM-IDBIBK-S",
+      "receivedAt": "2026-06-06T11:00:00.000Z",
+      "body": "Your IDBI Bank credit card payment of Rs 4500.00 is due on 10-06-26. Min amount due Rs 450.00. Ignore if paid. -IDBI Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

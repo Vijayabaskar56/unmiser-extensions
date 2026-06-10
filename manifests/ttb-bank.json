@@ -1,0 +1,302 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro TTBBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/TTBBankParser.kt), which is a thin subclass of BaseThailandBankParser.kt: canHandle matches the exact sender \"TTB\" or any sender containing \"THANACHART\" / \"TMB\"; everything else (THB amounts, Thai/English type keywords, \"คงเหลือ/Bal\" balances, \"บช/A/C xNNNN\" accounts, \"at/ร้าน MERCHANT\" merchants, the \"Available limit/วงเงินคงเหลือ\" credit limit, and the OTP/promo skip list) comes from the Thai base class, with reference/account fallbacks inherited from BankParser.kt's CompiledPatterns."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "th.ttb.bank",
+    "type": "sms-parser",
+    "name": "TMBThanachart Bank (TTB)",
+    "country": "TH",
+    "currency": "THB",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["TTB"],
+      "dltPatterns": ["^.*THANACHART.*$", "^.*TMB.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "รหัส",
+        "ยืนยัน",
+        "สมัคร",
+        "โปรโมชั่น",
+        "promotion",
+        "cashback offer"
+      ],
+      "requireAnyKeyword": [
+        "เงินเข้า",
+        "เงินออก",
+        "ถอนเงิน",
+        "โอนเงิน",
+        "ใช้จ่าย",
+        "เงินฝาก",
+        "รับเงิน",
+        "คงเหลือ",
+        "บาท",
+        "ยอดใช้จ่าย",
+        "withdrawal",
+        "deposit",
+        "transfer",
+        "payment",
+        "spent",
+        "receive",
+        "bal",
+        "thb",
+        "card transaction",
+        "card payment",
+        "credit card spending",
+        "available limit"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:THB|฿)\\s*(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*USD"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "(?:at|ร้าน)\\s+(?<value>[A-Za-z0-9\\s&._-]+?)(?:\\s+(?:A/C|บช|Bal|คงเหลือ|Available|on|$))"
+        },
+        {
+          "re": "at\\s+(?<value>[A-Za-z0-9\\s&._-]+)$"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        },
+        {
+          "re": "Reference\\s+Number[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx\\*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx\\*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account).*?(?<value>\\d+)(?:\\s|$)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/C|บช)\\s*x(?<value>\\d{4})",
+          "takeLast4": true
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "(?:Available limit|วงเงินคงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "indian clearing corporation",
+        "nsccl",
+        "nse clearing",
+        "clearing corporation",
+        "nach",
+        "ach",
+        "ecs",
+        "groww",
+        "zerodha",
+        "upstox",
+        "kite",
+        "kuvera",
+        "paytm money",
+        "etmoney",
+        "coin by zerodha",
+        "smallcase",
+        "angel one",
+        "angel broking",
+        "5paisa",
+        "icici securities",
+        "icici direct",
+        "hdfc securities",
+        "kotak securities",
+        "motilal oswal",
+        "sharekhan",
+        "edelweiss",
+        "axis direct",
+        "sbi securities",
+        "mutual fund",
+        "sip",
+        "elss",
+        "ipo",
+        "folio",
+        "demat",
+        "stockbroker",
+        "digital gold",
+        "sovereign gold",
+        "nse",
+        "bse",
+        "cdsl",
+        "nsdl"
+      ],
+      "credit": ["credit card spending", "ยอดใช้จ่ายต่างประเทศ", "ยอดใช้จ่าย"],
+      "expense": [
+        "เงินออก",
+        "ถอนเงิน",
+        "ถอนเงินสด",
+        "โอนเงินออก",
+        "โอนเงินผ่าน",
+        "ใช้จ่ายบัตร",
+        "ใช้จ่าย",
+        "withdrawal",
+        "payment",
+        "you spent",
+        "transfer out",
+        "card payment",
+        "card transaction",
+        "atm withdrawal"
+      ],
+      "income": [
+        "เงินเข้า",
+        "เงินฝาก",
+        "รับเงิน",
+        "โอนเงินเข้า",
+        "รับเงินพร้อมเพย์",
+        "รับเงินโอน",
+        "เงินฝากเข้า",
+        "deposit",
+        "receive",
+        "transfer in",
+        "transfer received"
+      ]
+    },
+    "cardRules": {
+      "includeKeywords": [
+        "credit card",
+        "บัตรเครดิต",
+        "card spending",
+        "card payment",
+        "card transaction",
+        "ใช้จ่ายบัตร",
+        "ยอดใช้จ่าย",
+        "card ending",
+        "debit card"
+      ],
+      "excludeKeywords": ["a/c", "account", "saving account"]
+    },
+    "cleaning": {
+      "stripPatterns": [],
+      "minMerchantLength": 2,
+      "commonWords": ["ผ่าน", "โดย", "จาก", "ที่", "ไปยัง", "ถึง"]
+    }
+  },
+  "fixtures": [
+    {
+      "name": "english promptpay payment with account and balance",
+      "sender": "TTB",
+      "receivedAt": "2026-06-01T09:10:00.000Z",
+      "body": "ttb: Payment 1,500.00 THB via PromptPay A/C x9012 Bal 7,200.00 THB",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "1500.00",
+          "transactionType": "EXPENSE",
+          "accountLast4": "9012",
+          "balance": "7200.00"
+        }
+      }
+    },
+    {
+      "name": "thai receive transfer with account",
+      "sender": "TTB",
+      "receivedAt": "2026-06-02T13:40:00.000Z",
+      "body": "ttb: รับเงินโอน 8,000.00 บาท บช x9012",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "8000.00",
+          "transactionType": "INCOME",
+          "accountLast4": "9012"
+        }
+      }
+    },
+    {
+      "name": "english card payment with merchant",
+      "sender": "TTB",
+      "receivedAt": "2026-06-03T16:45:00.000Z",
+      "body": "ttb: Card payment 890.00 THB at 7-ELEVEN A/C x9012",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "890.00",
+          "merchant": "7-ELEVEN",
+          "transactionType": "EXPENSE",
+          "accountLast4": "9012"
+        }
+      }
+    },
+    {
+      "name": "credit card spending with available limit",
+      "sender": "TTB",
+      "receivedAt": "2026-06-04T19:22:00.000Z",
+      "body": "ttb: Credit card spending 2,350.00 THB at CENTRAL WORLD Available limit 47,650.00 THB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2350.00",
+          "merchant": "CENTRAL WORLD",
+          "transactionType": "CREDIT",
+          "creditLimit": "47650.00"
+        }
+      }
+    },
+    {
+      "name": "thai deposit with balance",
+      "sender": "TTB",
+      "receivedAt": "2026-06-05T11:30:00.000Z",
+      "body": "ttb: เงินฝากเข้า 4,500.00 บาท บช x9012 คงเหลือ 14,040.00 บาท",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "4500.00",
+          "transactionType": "INCOME",
+          "accountLast4": "9012",
+          "balance": "14040.00"
+        }
+      }
+    },
+    {
+      "name": "thai otp message is filter-rejected",
+      "sender": "TTB",
+      "receivedAt": "2026-06-06T09:00:00.000Z",
+      "body": "ttb: รหัส OTP ของคุณคือ 123456 ใช้สำหรับยืนยันการทำรายการ ห้ามบอกผู้อื่น",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

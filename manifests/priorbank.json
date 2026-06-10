@@ -1,0 +1,117 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro PriorbankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/PriorbankParser.kt). Priorbank (Belarus) sends transliterated Russian SMS, e.g.: Karta 6***6666 29-10-25 18:34:25. Oplata 12.90 BYN. BLR RBO N77 \"KFC Zavod\". Dostupno: 947.09 BYN. Tel. 7299090 \"Karta\" = card, \"Oplata\" = payment (expense), \"Dostupno\" = available balance."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "by.priorbank.bank",
+    "type": "sms-parser",
+    "name": "Priorbank",
+    "country": "BY",
+    "currency": "BYN",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["Priorbank", "PRIORBANK"],
+      "dltPatterns": ["^.*PRIORBANK.*$"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "kod", "parol"],
+      "requireAnyKeyword": ["oplata", "karta", "dostupno"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Oplata\\s+(?<value>[0-9]+(?:\\.\\d{2})?)\\s+BYN"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "\"(?<value>[^\"]+)\""
+        },
+        {
+          "re": "BYN\\.\\s+(?:BLR\\s+)?(?<value>[^.]+?)\\.\\s+Dostupno"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Dostupno:\\s+(?<value>[0-9]+(?:\\.\\d{2})?)\\s+BYN"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "Karta\\s+[6-9]\\*+(?<value>\\d{4})"
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["oplata"],
+      "income": ["popolnenie", "zachislenie"]
+    },
+    "cleaning": {
+      "minMerchantLength": 2
+    }
+  },
+  "fixtures": [
+    {
+      "name": "card payment with quoted merchant (KFC)",
+      "sender": "Priorbank",
+      "receivedAt": "2025-10-29T18:34:25.000Z",
+      "body": "Karta 6***6666 29-10-25 18:34:25. Oplata 12.90 BYN. BLR RBO N77 \"KFC Zavod\". Dostupno: 947.09 BYN. Tel. 7299090",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "12.90",
+          "merchant": "KFC Zavod",
+          "accountLast4": "6666",
+          "balance": "947.09",
+          "transactionType": "EXPENSE",
+          "currency": "BYN"
+        }
+      }
+    },
+    {
+      "name": "card payment at gas station (unquoted merchant, BLR prefix stripped)",
+      "sender": "Priorbank",
+      "receivedAt": "2025-10-28T15:31:29.000Z",
+      "body": "Karta 6***6666 28-10-25 15:31:29. Oplata 19.98 BYN. BLR AZS N55. Dostupno: 997.86 BYN. Tel. 7299090",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "19.98",
+          "merchant": "AZS N55",
+          "accountLast4": "6666",
+          "balance": "997.86",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "card payment mobile bank",
+      "sender": "PRIORBANK",
+      "receivedAt": "2025-10-26T18:30:21.000Z",
+      "body": "Karta 6***6666 26-10-25 18:30:21. Oplata 8.00 BYN. BLR MOBILE BANK. Dostupno: 250.70 BYN. Tel. 7299090",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "8.00",
+          "merchant": "MOBILE BANK",
+          "accountLast4": "6666",
+          "balance": "250.70",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "otp/code message is filter-rejected",
+      "sender": "Priorbank",
+      "receivedAt": "2025-10-30T09:00:00.000Z",
+      "body": "Vash kod podtverzhdeniya: 123456. Nikomu ne soobshchayte etot kod.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

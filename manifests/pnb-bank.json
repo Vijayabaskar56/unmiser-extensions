@@ -1,0 +1,330 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro PNBBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/PNBBankParser.kt) plus the BankParser.kt base fallbacks it relies on. Covers the plain \"Ac XX1234 Debited with Rs.\" alert, the ATM/card debit with \"thru card\", auto-pay activation with an initial debit, and UPI-Mandate creation."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.pnb.bank",
+    "type": "sms-parser",
+    "name": "Punjab National Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["PNB", "PNBBNK"],
+      "dltPatterns": [
+        "PUNJAB NATIONAL BANK",
+        "PNBBNK",
+        "PUNBN",
+        "PNBSMS",
+        "^[A-Z]{2}-PNB-S$",
+        "^[A-Z]{2}-PNB$"
+      ]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid",
+        "upi-mandate",
+        "auto pay facility",
+        "register for e-statement"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "initial\\s+amount\\s+of\\s+(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+has\\s+been\\s+debited"
+        },
+        {
+          "re": "UPI-Mandate\\s+is\\s+successfully\\s+created.*for\\s+(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "debited\\s+with\\s+(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+(?:has\\s+been\\s+)?credited"
+        },
+        {
+          "re": "credited\\s+(?:with\\s+)?(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "auto\\s+pay.*?activated.*?from\\s+(?<value>[^.]+?)(?:\\s+An\\s+initial|\\.|$)"
+        },
+        {
+          "re": "UPI-Mandate.*towards\\s+(?<value>\\S+)\\s+for"
+        },
+        {
+          "re": "thru\\s+(?<value>card\\s+[X*]+\\d{4})"
+        },
+        {
+          "re": "From\\s+(?<value>[^/]+)/"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Aval\\s+Bal|Avl\\s+Bal|Bal)\\s*(?:INR\\s*|Rs\\.?\\s*)?(?<value>[0-9,]+(?:\\.\\d{2})?)(?:\\s+(?:CR|DR))?"
+        },
+        {
+          "re": "Bal\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+(?:CR|DR)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?:Rs\\.?|INR|₹)?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "ref\\s+no\\.\\s+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI:\\s*(?<value>[0-9]+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c(?:\\s*No\\.)?|Ac|Card)\\s*(?:[X*]+)?(?<value>\\d{4,16})",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "indian clearing corporation",
+        "nsccl",
+        "clearing corporation",
+        "nach",
+        "groww",
+        "zerodha",
+        "upstox",
+        "kuvera",
+        "paytm money",
+        "etmoney",
+        "smallcase",
+        "angel one",
+        "5paisa",
+        "hdfc securities",
+        "kotak securities",
+        "mutual fund",
+        "sip",
+        "elss",
+        "folio",
+        "demat",
+        "digital gold",
+        "sovereign gold"
+      ],
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["credited", "deposited", "received", "refund", "cashback"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s+PVT\\.?\\s*LTD\\.?$",
+        "\\s+PRIVATE\\s+LIMITED$",
+        "\\s+LTD\\.?$",
+        "\\s+LIMITED$",
+        "\\s*-\\s*$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["auto pay facility", "upi-mandate"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["upi"],
+          "notContainsAny": ["thru card", "auto pay", "upi-mandate", "pnb atm", "neft"]
+        },
+        "field": "merchant",
+        "value": "UPI Transaction"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["neft"],
+          "notContainsAny": ["thru card", "auto pay", "upi-mandate", "pnb atm"]
+        },
+        "field": "merchant",
+        "value": "NEFT Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["pnb atm"],
+          "notContainsAny": ["thru card", "auto pay", "upi-mandate"]
+        },
+        "field": "merchant",
+        "value": "PNB ATM Withdrawal"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "plain debit alert with masked account",
+      "sender": "VM-PNBSMS-S",
+      "receivedAt": "2026-02-20T07:47:16.000Z",
+      "body": "Ac XX1234 Debited with Rs.5000.00, 20-02-2026 07:47:16. Aval Bal Rs.27000.00 CR. Helpline 18001800/18002021-PNB",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "5000.00",
+          "transactionType": "EXPENSE",
+          "accountLast4": "1234",
+          "balance": "27000.00"
+        }
+      }
+    },
+    {
+      "name": "atm debit thru card",
+      "sender": "VA-PNBSMS-S",
+      "receivedAt": "2025-11-21T13:23:22.000Z",
+      "body": "A/c XX1234 debited with Rs.5000.00,21-11-2025 13:23:22 thru card XX9239  . Out of 5 free txn on PNB ATM, you utilized 1 txn. Chrgs applicable as per policy. Bal 27000.00 CR. If not done, fwd SMS to 9264192641 to block card/call 18001800/18002021-PNB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "merchant": "card XX9239",
+          "transactionType": "EXPENSE",
+          "accountLast4": "1234",
+          "balance": "27000.00"
+        }
+      }
+    },
+    {
+      "name": "debit with long unmasked account number",
+      "sender": "VK-PNBSMS-S",
+      "receivedAt": "2025-06-20T08:18:35.000Z",
+      "body": "Ac XXXXXXXX00341234 Debited with Rs.10000.00, 20-06-2025 08:18:35. Aval Bal Rs.27000.00 CR. Helpline 18001800/18002021-PNB",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "10000.00",
+          "transactionType": "EXPENSE",
+          "accountLast4": "1234",
+          "balance": "27000.00"
+        }
+      }
+    },
+    {
+      "name": "auto-pay activation with initial debit",
+      "sender": "VM-PNBSMS-S",
+      "receivedAt": "2026-01-12T10:00:00.000Z",
+      "body": "Dear Customer, auto pay facility has been successfully activated on your Punjab National Bank Card XX4356 for Rs. 75000.00, from Google Clouds. An initial amount of Rs. 2.00 has been debited from your account. Google Clouds can initiate subsequent transactions for a max amount upto Rs. 75000.00. You will receive notification with the transaction amount prior to any subsequent debits initiated by Google Clouds. Manage / cancel your Auto-Pay facility with ID RTy243262532g via https://www.sihub.in/man",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2.00",
+          "merchant": "Google Clouds",
+          "transactionType": "EXPENSE",
+          "accountLast4": "4356"
+        }
+      }
+    },
+    {
+      "name": "upi mandate creation",
+      "sender": "AX-PNBSMS-S",
+      "receivedAt": "2026-02-01T09:30:00.000Z",
+      "body": "Your UPI-Mandate is successfully created towards Google for Rs.1500.00 from A/c No.XXXXXX4356. UMN:1d478c77808c410281f435rer5qwerty6@ybl-PNB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1500.00",
+          "merchant": "Google",
+          "transactionType": "EXPENSE",
+          "accountLast4": "4356"
+        }
+      }
+    },
+    {
+      "name": "neft credit with reference",
+      "sender": "VM-PNBSMS-S",
+      "receivedAt": "2026-06-10T11:15:00.000Z",
+      "body": "Ac XX1234 credited with Rs.25000.00 on 10-06-2026 through NEFT, ref no. PUNBN12345678. Aval Bal Rs.52000.00 CR-PNB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25000.00",
+          "merchant": "NEFT Transfer",
+          "transactionType": "INCOME",
+          "accountLast4": "1234",
+          "balance": "52000.00",
+          "reference": "PUNBN12345678"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "VM-PNBSMS-S",
+      "receivedAt": "2026-06-01T08:00:00.000Z",
+      "body": "Your OTP for PNB net banking transaction is 123456. Valid for 10 mins. Do not share it with anyone-PNB",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

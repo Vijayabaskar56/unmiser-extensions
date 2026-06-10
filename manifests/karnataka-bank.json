@@ -1,0 +1,337 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro KarnatakaBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/KarnatakaBankParser.kt) plus the BankParser.kt base-class fallbacks the Kotlin parser delegates to via super.extractX(...) (CompiledPatterns Amount/Merchant/Reference/Account/ Balance lists and the isTransactionMessage skip-list). Documented formats: Debit: \"Your Account x001234x has been DEBITED for Rs.6368/-\" Credit: \"Your a/c XX1234 is credited by Rs.6600.00\" ACH, UPI and other transaction types."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.karnataka.bank",
+    "type": "sms-parser",
+    "name": "Karnataka Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["KBLBNK", "KARBANK"],
+      "dltPatterns": [
+        "^[A-Z]{2}-KBLBNK(-S)?$",
+        "^[A-Z]{2}-KARBANK-S$",
+        ".*KARNATAKA\\s?BANK.*",
+        ".*KBLBNK.*",
+        ".*KTKBANK.*",
+        ".*KARBANK.*"
+      ]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "DEBITED\\s+for\\s+Rs\\.?(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "credited\\s+by\\s+Rs\\.?(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "ACH[A-Za-z]*-(?<value>[^/]+)/"
+        },
+        {
+          "re": "from\\s+(?<value>[^@\\s]+)\\s+on"
+        },
+        {
+          "re": "(?<value>LIC\\s+of\\s+India)"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n@]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Balance\\s+is\\s+Rs\\.?(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "UPI\\s+Ref\\s+no\\s+(?<value>[0-9]+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        },
+        {
+          "re": "Reference\\s+Number[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "Account\\s+[xX]*(?<value>[0-9]{4,6})[xX]*",
+          "takeLast4": true
+        },
+        {
+          "re": "a/c\\s+[xX]{0,2}(?<value>[0-9]{4,6})",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account).*?(?<value>\\d+)(?:\\s|$)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "indian clearing corporation",
+        "nsccl",
+        "nse clearing",
+        "clearing corporation",
+        "nach",
+        "ach",
+        "ecs",
+        "groww",
+        "zerodha",
+        "upstox",
+        "kuvera",
+        "paytm money",
+        "etmoney",
+        "smallcase",
+        "angel one",
+        "angel broking",
+        "5paisa",
+        "icici securities",
+        "hdfc securities",
+        "kotak securities",
+        "motilal oswal",
+        "sharekhan",
+        "mutual fund",
+        "sip",
+        "elss",
+        "ipo",
+        "folio",
+        "demat",
+        "stockbroker",
+        "digital gold",
+        "sovereign gold",
+        "nse",
+        "bse",
+        "cdsl",
+        "nsdl"
+      ],
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["credited", "deposited", "received", "refund", "cashback"]
+    },
+    "cardRules": {
+      "excludeKeywords": ["a/c", "account", "ac ", "acc ", "saving account", "current account"],
+      "includeKeywords": [
+        "card ending",
+        "card xx",
+        "debit card",
+        "credit card",
+        "card no.",
+        "card number",
+        "card *",
+        "card x"
+      ]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*",
+        "\\s+on\\s+\\d{2}.*",
+        "\\s+UPI.*",
+        "\\s+at\\s+\\d{2}:\\d{2}.*",
+        "\\s*-\\s*$",
+        "(\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(\\s+LTD\\.?|\\s+LIMITED)$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["upi"]
+        },
+        "field": "merchant",
+        "value": "UPI Transaction"
+      },
+      {
+        "kind": "extractFieldWhen",
+        "when": {
+          "containsAny": ["upi"]
+        },
+        "field": "merchant",
+        "extractors": [
+          {
+            "re": "ACH[A-Za-z]*-(?<value>[^/]+)/"
+          },
+          {
+            "re": "from\\s+(?<value>[^@\\s]+)\\s+on"
+          }
+        ]
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "documented debit format with balance",
+      "sender": "AX-KBLBNK-S",
+      "receivedAt": "2026-05-12T09:15:00.000Z",
+      "body": "Your Account x001234x has been DEBITED for Rs.6368/- on 12-05-2026. Balance is Rs.705.92. Call 18004251444 if not done by you - Karnataka Bank",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "6368",
+          "accountLast4": "1234",
+          "balance": "705.92",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "documented upi credit with vpa falls back to UPI Transaction",
+      "sender": "KBLBNK",
+      "receivedAt": "2026-06-10T11:30:00.000Z",
+      "body": "Your a/c XX1234 is credited by Rs.6600.00 on 10-06-2026 from john.deposits@okhdfc (UPI Ref no 441877242175). Balance is Rs.7305.92 - Karnataka Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "6600.00",
+          "merchant": "UPI Transaction",
+          "accountLast4": "1234",
+          "balance": "7305.92",
+          "reference": "441877242175",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "upi credit with payer name keeps real merchant",
+      "sender": "AD-KARBANK-S",
+      "receivedAt": "2026-06-08T16:42:00.000Z",
+      "body": "Your a/c XX1234 is credited by Rs.500.00 from RameshK on 08-06-2026 (UPI Ref no 512345678901). Balance is Rs.7805.92 - Karnataka Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "RameshK",
+          "accountLast4": "1234",
+          "balance": "7805.92",
+          "reference": "512345678901",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "ach debit narration classified as INVESTMENT like the Kotlin parser",
+      "sender": "JM-KBLBNK",
+      "receivedAt": "2026-06-05T08:05:00.000Z",
+      "body": "Your Account x002345x has been DEBITED for Rs.1,499.00/- on 05-06-2026 towards ACHInwDr-LIC OF INDIA/0506. Balance is Rs.10,205.42 - Karnataka Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1499.00",
+          "merchant": "LIC OF INDIA",
+          "accountLast4": "2345",
+          "balance": "10205.42",
+          "transactionType": "INVESTMENT"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "KBLBNK",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Your OTP for Karnataka Bank net banking login is 482910. It is valid for 10 minutes. Do not share it with anyone - Karnataka Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "payment collect request is filter-rejected",
+      "sender": "AX-KBLBNK-S",
+      "receivedAt": "2026-06-03T13:20:00.000Z",
+      "body": "merchant@okaxis has requested Rs.999.00 from your a/c XX1234. Approve the collect request in your UPI app before 03-06-2026 - Karnataka Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

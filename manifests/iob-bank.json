@@ -1,0 +1,258 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro IndianOverseasBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/IndianOverseasBankParser.kt) plus the three IOB formats observed in real device scans: the \"a/c no. XXXXX99 is credited by\" UPI narrative, the \"Rs.X Credited to SB-xxxNNNN AcBal:\" ledger line with a [UPI/...]/[NEFT-...]/[CHRGS- SMS] bracket, and the \"debited for payee NAME for Rs.\" UPI debit."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.iob.bank",
+    "type": "sms-parser",
+    "name": "Indian Overseas Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["IOB", "IOBCHN"],
+      "dltPatterns": ["^[A-Z]{2}-IOBCHN.*$", "^[A-Z]{2}-IOB.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "verification",
+        "request",
+        "failed",
+        "will be debited",
+        "will be deducted",
+        "applicable sms charges",
+        "txn is not enabled",
+        "transaction declined",
+        "never respond"
+      ],
+      "requireAnyKeyword": ["credited", "debited", "withdrawn", "deposited"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)\\s+(?:Debited|Credited)\\s+to\\s+(?:SB|CA|CC)-"
+        },
+        {
+          "re": "credited\\s+by\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "debited\\s+by\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "credited\\s+with\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "debited\\s+for\\s+payee\\s+.+?\\s+for\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "debited\\s+(?:for|towards)\\s+.*?Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "debited\\s+for\\s+payee\\s+(?<value>[^@\\n]+?)\\s+for\\s+Rs"
+        },
+        {
+          "re": "debited\\s+for\\s+payee\\s+(?<value>[^@\\s]+)@\\S+\\s+for\\s+Rs"
+        },
+        {
+          "re": "\\[NEFT-(?<value>[^-\\]]+)"
+        },
+        {
+          "re": "from\\s+(?<value>[^-\\n]+?)\\s*-\\S*[@!]"
+        }
+      ],
+      "balance": [
+        {
+          "re": "AcBal:\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "Avl\\s+Balance\\s+in\\s+Acct:\\S+\\s+is\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "\\[(?:UPI|IMPS)(?:/(?:UPI|IMPS))?/\\s*(?<value>\\d+)"
+        },
+        {
+          "re": "\\(UPI\\s+Ref\\s+no\\s+(?<value>\\d+)\\)"
+        },
+        {
+          "re": "UPI\\s+Ref\\s+no\\s+(?<value>\\d+)"
+        },
+        {
+          "re": "\\bref\\s+(?<value>\\d{6,})"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "\\b(?:SB|CA|CC)-[xX]*(?<value>\\d{2,4})\\b",
+          "takeLast4": true
+        },
+        {
+          "re": "a/c\\s+no\\.\\s+[Xx]*(?<value>\\d{2,4})",
+          "takeLast4": true
+        },
+        {
+          "re": "a/c:?\\s*[Xx]*(?<value>\\d{2,4})",
+          "takeLast4": true
+        },
+        {
+          "re": "account\\s+has\\s+been\\s+debited\\s+towards\\s+[Xx]*(?<value>\\d{2,4})",
+          "takeLast4": true
+        },
+        {
+          "re": "IOB\\s+account\\s+[Xx]*(?<value>\\d{2,4})",
+          "takeLast4": true
+        },
+        {
+          "re": "Acct:\\s*\\d*[xX]+(?<value>\\d{2,4})",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": ["iccl", "nsccl", "groww", "zerodha", "sip", "mutual fund"],
+      "income": ["credited by", "credited with", "is credited", "credited to"],
+      "expense": ["debited by", "debited for", "is debited", "debited to", "debited towards"]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s+PVT\\.?\\s+LTD\\.?$", "\\s+LTD\\.?$"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["CHRGS", "SMS"]
+        },
+        "field": "merchant",
+        "value": "SMS Charges"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["[UPI/"]
+        },
+        "field": "merchant",
+        "value": "UPI"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "upi credit with payer narrative",
+      "sender": "VM-IOBCHN-S",
+      "receivedAt": "2026-06-09T14:52:09.000Z",
+      "body": "Your a/c no. XXXXX42 is credited by Rs.890.00 on 2026-06-09 14:52:09.605, from RAVI KUMAR-ravikumar40-1!okaxis(UPI Ref no 652643976623).Payer Remark - UPI -IOB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "890.00",
+          "merchant": "RAVI KUMAR",
+          "accountLast4": "42",
+          "transactionType": "INCOME",
+          "reference": "652643976623"
+        }
+      }
+    },
+    {
+      "name": "ledger credit with UPI bracket and balance",
+      "sender": "BV-IOBCHN-S",
+      "receivedAt": "2026-06-02T10:31:44.000Z",
+      "body": "Rs.10000.00 Credited to SB-xxx2345 AcBal:79503.33 CLRBal: 79547.15 [UPI/615356 ] TOWNBRANCH-CITY on 02-06-2026 10:31:44.IOB.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "10000.00",
+          "merchant": "UPI",
+          "accountLast4": "2345",
+          "balance": "79503.33",
+          "transactionType": "INCOME",
+          "reference": "615356"
+        }
+      }
+    },
+    {
+      "name": "sms charges ledger debit",
+      "sender": "VA-IOBCHN-S",
+      "receivedAt": "2026-05-23T08:00:39.000Z",
+      "body": "Rs.20.64 Debited to SB-xxx2345 AcBal:65162.78 CLRBal: 65206.60 [CHRGS- SMS ] BRANCH ONE on 23-05-2026 08:00:39.IOB.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "20.64",
+          "merchant": "SMS Charges",
+          "accountLast4": "2345",
+          "balance": "65162.78",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "neft credit with counterparty bracket",
+      "sender": "JD-IOBCHN-S",
+      "receivedAt": "2026-05-20T15:01:34.000Z",
+      "body": "Rs.4740.08 Credited to SB-xxx2345 AcBal:65040.08 CLRBal: 65083.90 [NEFT-CITI- ] TOWNBRANCH-CITY on 20-05-2026 15:01:34.IOB.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "4740.08",
+          "merchant": "CITI",
+          "accountLast4": "2345",
+          "balance": "65040.08",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "upi debit for payee",
+      "sender": "VM-IOBCHN-S",
+      "receivedAt": "2026-03-25T12:00:00.000Z",
+      "body": "Your a/c XXXXX42 debited for payee HOTEL SARAVANA for Rs. 150.00 on 2026-03-25, ref 645069093618.If not you, report to your bank immediately-IOB.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "150.00",
+          "merchant": "HOTEL SARAVANA",
+          "accountLast4": "42",
+          "transactionType": "EXPENSE",
+          "reference": "645069093618"
+        }
+      }
+    },
+    {
+      "name": "investment payee classified as INVESTMENT",
+      "sender": "VM-IOBCHN-S",
+      "receivedAt": "2026-03-17T09:00:00.000Z",
+      "body": "Your a/c XXXXX42 debited for payee GROWW INVEST TECH PVT LTD for Rs. 5000.00 on 2026-03-17, ref 644293831979.If not you, report to your bank immediately-IOB.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "merchant": "GROWW INVEST TECH",
+          "accountLast4": "42",
+          "transactionType": "INVESTMENT",
+          "reference": "644293831979"
+        }
+      }
+    },
+    {
+      "name": "autopay pre-debit alert is filter-rejected",
+      "sender": "VM-IOBCHN-S",
+      "receivedAt": "2026-06-01T08:00:00.000Z",
+      "body": "UPI AutoPay Alert: 1000.00 will be deducted from IOB account XXXXX42 for ICCL - Mutual Funds - Autopay on 2026-06-01 -IOB",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

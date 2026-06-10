@@ -1,0 +1,190 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro LazyPayParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/LazyPayParser.kt). LazyPay is an Indian Buy Now Pay Later (BNPL) wallet service; like the original (and JuspayParser/Amazon Pay), every transaction is typed CREDIT so wallet spends aren't double-counted against the funding bank account. Porting notes: - canHandle uses contains(\"LZYPAY\") || contains(\"LAZYPAY\"); senders list the documented ids (BP-LZYPAY-S, JM-LZYPAY-S, JD-LZYPAY-S) and dltPatterns cover the contains() checks. - LazyPayParser.isTransactionMessage skips failure messages outright, and skips promos (\"offer\"/\"get cashback\"/\"explore more\") UNLESS the body also contains \"payment of\" or \"was successful\". Since requireAnyKeyword already demands one of the transaction phrases, the promo branch is reproduced without explicit promo excludeKeywords: a promo lacking a transaction phrase fails requireAnyKeyword anyway. (Edge case deviation: a promo body containing \"against your lazypay statement\" or \"thanks for your payment\" but neither allow-back phrase would be rejected by Kotlin yet accepted here; no such SMS format is known.) - Kotlin's special-case merchant mapping (Zepto Marketplace -> Zepto, Innovative Retail Concepts -> BigBasket, Swiggy, Zomato) is ported as setFieldWhen pipeline steps; they test the whole body rather than just the extracted merchant segment, a faithful approximation since the segment comes from the body. - The generic-suffix cleanup (Private/Pvt/Ltd/... and trailing numbers) is ported to cleaning.stripPatterns. - super.extractAmount/extractReference/extractMerchant fallbacks are not ported: the LazyPay-specific Rs-amount and \"txn <id>\" patterns cover every known LazyPay format, and the merchant default is \"LazyPay\" (fallbackField). - LazyPay is a wallet: messages carry no account number, so accountLast4 falls back to \"0000\" (see jiopay.ts for the rationale)."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.lazypay.wallet",
+    "type": "sms-parser",
+    "name": "LazyPay",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["LAZYPAY", "LZYPAY", "BP-LZYPAY-S", "JM-LZYPAY-S", "JD-LZYPAY-S"],
+      "dltPatterns": ["^.*LZYPAY.*$", "^.*LAZYPAY.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "could not be processed",
+        "due to a failure",
+        "payment failed",
+        "transaction failed",
+        "unsuccessful"
+      ],
+      "requireAnyKeyword": [
+        "payment of",
+        "was successful",
+        "against your lazypay statement",
+        "thanks for your payment"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "on\\s+(?<value>[^.]+?)\\s+was\\s+successful"
+        }
+      ],
+      "reference": [
+        {
+          "re": "txn\\s+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "Available\\s+limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avl\\s+Lmt:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s*(Private|Pvt\\.?|Ltd\\.?|Limited|Inc\\.?|LLC|LLP).*$", "\\s*\\d+$"]
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["zepto marketplace", "was successful"]
+        },
+        "field": "merchant",
+        "value": "Zepto"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["innovative retail concepts", "was successful"]
+        },
+        "field": "merchant",
+        "value": "BigBasket"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["swiggy", "was successful"]
+        },
+        "field": "merchant",
+        "value": "Swiggy"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["zomato", "was successful"]
+        },
+        "field": "merchant",
+        "value": "Zomato"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["against your lazypay statement"],
+          "notContainsAny": ["was successful"]
+        },
+        "field": "merchant",
+        "value": "LazyPay Repayment"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "merchant",
+        "value": "LazyPay"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "transactionType",
+        "value": "CREDIT"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "accountLast4",
+        "value": "0000"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "purchase with special-cased merchant (Zepto Marketplace)",
+      "sender": "BP-LZYPAY-S",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Payment of Rs. 235.76 for txn TXN512924131 on Zepto Marketplace Private Limited was successful. Thank you for using LazyPay!",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "235.76",
+          "merchant": "Zepto",
+          "transactionType": "CREDIT",
+          "reference": "TXN512924131",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "purchase with generic merchant suffix cleanup",
+      "sender": "JM-LZYPAY-S",
+      "receivedAt": "2026-06-02T12:30:00.000Z",
+      "body": "Payment of Rs 1,499.00 for txn TXN98765432 on Cult Fit Healthcare Pvt Ltd was successful via LazyPay.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1499.00",
+          "merchant": "Cult Fit Healthcare",
+          "transactionType": "CREDIT",
+          "reference": "TXN98765432",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "statement repayment confirmation",
+      "sender": "JD-LZYPAY-S",
+      "receivedAt": "2026-06-05T09:00:00.000Z",
+      "body": "Thanks for your payment of Rs. 5,000.00 against your LazyPay statement. Your dues are now cleared.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "merchant": "LazyPay Repayment",
+          "transactionType": "CREDIT",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "failed payment is filter-rejected",
+      "sender": "BP-LZYPAY-S",
+      "receivedAt": "2026-06-06T18:45:00.000Z",
+      "body": "Payment of Rs. 350.00 for txn TXN11122233 on Swiggy could not be processed due to a failure. Please retry from the LazyPay app.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "promotional cashback message is filter-rejected",
+      "sender": "JM-LZYPAY-S",
+      "receivedAt": "2026-06-07T11:15:00.000Z",
+      "body": "Get cashback up to Rs. 100 on your next LazyPay transaction! Explore more offers in the LazyPay app today.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

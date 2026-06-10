@@ -1,0 +1,68 @@
+{
+  "$schema": "../manifest.schema.json",
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.slice",
+    "type": "sms-parser",
+    "name": "Slice",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["SLICE"],
+      "dltPatterns": ["^[A-Z]{2}-SLICE-[A-Z]$"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "one time password", "offer"],
+      "requireAnyKeyword": ["spent", "debited", "credited"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)\\s+spent"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\.|$)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "card\\s+(?:XX|x|\\*)*(?<value>\\d{4})",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["spent", "debited"],
+      "income": ["credited", "refund"]
+    },
+    "cardRules": {
+      "includeKeywords": ["card"]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s+on\\s+\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4}.*$"],
+      "minMerchantLength": 2
+    }
+  },
+  "fixtures": [
+    {
+      "name": "card spend",
+      "sender": "JD-SLICE-S",
+      "receivedAt": "2026-06-09T10:00:00.000Z",
+      "body": "Rs.450.00 spent on your Slice card XX1234 at SWIGGY on 09/06/26.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "450.00",
+          "merchant": "SWIGGY",
+          "accountLast4": "1234",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    }
+  ]
+}

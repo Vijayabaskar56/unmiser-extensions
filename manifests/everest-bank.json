@@ -1,0 +1,252 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro EverestBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/EverestBankParser.kt). Everest Bank (Nepal, NPR) alert format: \"Dear Customer, Your A/c <acct> is debited|credited by NPR <amt> For: <details>. Never Share Password/OTP With Anyone\" The \"For:\" section drives merchant/reference: - \"CWDR/<rrn>/<timestamp>\" -> ATM withdrawal - \"FPY:IBFT:<ref>:<id>:<bankcode>\" -> Fonepay IBFT transfer - \"<id>/<payment type>,<receiver>\" -> payment type as merchant NOTE: the original checks its positive keywords BEFORE the base skip-list, so real bodies ending in \"Never Share Password/OTP\" still parse. The engine runs excludeKeywords first, so \"otp\" is deliberately NOT excluded here."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "np.everest.bank",
+    "type": "sms-parser",
+    "name": "Everest Bank",
+    "country": "NP",
+    "currency": "NPR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["EVEREST", "UJJ SH", "CWRD"],
+      "dltPatterns": ["^\\d{7,10}$", "EVERESTBANK", "EBL", "^[A-Z]{2}-EVEREST-[A-Z]$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "ignore if already paid",
+        "have received payment",
+        "minimum amount due",
+        "min amount due",
+        "is overdue",
+        "in arrears"
+      ],
+      "requireAnyKeyword": [
+        "dear customer",
+        "your a/c",
+        "is debited",
+        "is credited",
+        "debited by",
+        "credited by",
+        "for:",
+        "never share password",
+        "npr",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "NPR\\s+(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s"
+        },
+        {
+          "re": "NPR\\s+(?<value>[0-9,]+(?:\\.[0-9]{2})?)(?:\\s|$)"
+        },
+        {
+          "re": "(?:debited|credited)\\s+by\\s+NPR\\s+(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "For:\\s*[^,.]*?\\/(?<value>[^,/.]*[A-Za-z][^,/.]*)\\s*,"
+        },
+        {
+          "re": "For:\\s*[^,.]*\\/[^,.]*,\\s*(?!UJJ SH\\b)(?<value>[^,.]+?)\\s*\\."
+        },
+        {
+          "re": "For:\\s*(?<value>[^,/.]+?)(?:\\.\\s|\\.$|$)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "For:\\s*CWDR\\/(?<value>\\d+\\/\\d+)"
+        },
+        {
+          "re": "For:\\s*[^.]*?(?<value>\\d{6,})"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "A\\/c\\s+(?<value>[^\\s]+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["is debited", "debited by"],
+      "income": ["is credited", "credited by"]
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["For: CWDR/"]
+        },
+        "field": "merchant",
+        "value": "ATM Withdrawal"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["For: FPY:IBFT"]
+        },
+        "field": "merchant",
+        "value": "Fonepay IBFT"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "debit mobile recharge",
+      "sender": "9843368",
+      "receivedAt": "2026-06-01T09:15:00.000Z",
+      "body": "Dear Customer, Your A/c 12345678 is debited by NPR 520.00 For: 9843368/Mobile Recharge,Ncell. Never Share Password/OTP With Anyone",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "520.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Mobile Recharge",
+          "accountLast4": "5678",
+          "reference": "9843368"
+        }
+      }
+    },
+    {
+      "name": "credit salary",
+      "sender": "UJJ SH",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Dear Customer, Your A/c 87654321 is credited by NPR 15,000.00 For: Salary Payment/Monthly Salary,UJJ SH. Never Share Password/OTP With Anyone",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "15000.00",
+          "transactionType": "INCOME",
+          "merchant": "Monthly Salary",
+          "accountLast4": "4321"
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal",
+      "sender": "CWRD",
+      "receivedAt": "2026-06-02T08:54:00.000Z",
+      "body": "Dear Customer, Your A/c 11223344 is debited by NPR 6,000.00 For: CWDR/521708008016/202508050854. Never Share Password/OTP With Anyone",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "6000.00",
+          "transactionType": "EXPENSE",
+          "merchant": "ATM Withdrawal",
+          "accountLast4": "3344",
+          "reference": "521708008016/202508050854"
+        }
+      }
+    },
+    {
+      "name": "debit food delivery",
+      "sender": "9801234567",
+      "receivedAt": "2026-06-03T19:30:00.000Z",
+      "body": "Dear Customer, Your A/c 99887766 is debited by NPR 1,250.00 For: 9801234567/Food Delivery,Foodmandu. Never Share Password/OTP With Anyone",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1250.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Food Delivery",
+          "accountLast4": "7766",
+          "reference": "9801234567"
+        }
+      }
+    },
+    {
+      "name": "credit business payment",
+      "sender": "9843001",
+      "receivedAt": "2026-06-04T11:00:00.000Z",
+      "body": "Dear Customer, Your A/c 55443322 is credited by NPR 50,000.00 For: Business Payment/Invoice Settlement,ABC Company. Never Share Password/OTP With Anyone",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "50000.00",
+          "transactionType": "INCOME",
+          "merchant": "Invoice Settlement",
+          "accountLast4": "3322"
+        }
+      }
+    },
+    {
+      "name": "debit ecommerce",
+      "sender": "EVEREST",
+      "receivedAt": "2026-06-05T16:45:00.000Z",
+      "body": "Dear Customer, Your A/c 33445566 is debited by NPR 750.00 For: Online Shopping/E-commerce,Daraz. Never Share Password/OTP With Anyone",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "750.00",
+          "transactionType": "EXPENSE",
+          "merchant": "E-commerce",
+          "accountLast4": "5566"
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal via EBL_ALERT with masked account",
+      "sender": "EBL_ALERT",
+      "receivedAt": "2026-03-04T08:49:00.000Z",
+      "body": "Dear Customer, Your A/c ###439 is debited by NPR 4,000.00 For: CWDR/606308002664/202603040849. Never Share Password/OTP With Anyone",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "4000.00",
+          "transactionType": "EXPENSE",
+          "merchant": "ATM Withdrawal",
+          "accountLast4": "439"
+        }
+      }
+    },
+    {
+      "name": "fonepay ibft credit via EBL_ALERT",
+      "sender": "EBL_ALERT",
+      "receivedAt": "2026-03-05T13:20:00.000Z",
+      "body": "Dear Customer, Your A/c ###439 is credited by NPR 1,000.00 For: FPY:IBFT:1354024319:5245:EVBLN. Never Share Password/OTP With Anyone",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1000.00",
+          "transactionType": "INCOME",
+          "merchant": "Fonepay IBFT",
+          "accountLast4": "439"
+        }
+      }
+    },
+    {
+      "name": "promotional message is filter-rejected",
+      "sender": "EVEREST",
+      "receivedAt": "2026-06-06T12:00:00.000Z",
+      "body": "Everest Bank festive season! Get 50% discount on locker charges. Visit your nearest branch today.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

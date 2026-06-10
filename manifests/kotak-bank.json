@@ -1,0 +1,324 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro KotakBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/KotakBankParser.kt) plus the BankParser.kt base-class fallbacks it relies on (CompiledPatterns Amount/Merchant/Reference/Account/Balance). Kotak's UPI formats are \"Sent Rs.X from Kotak Bank AC XNNNN to payee@bank on dd-mm-yy.UPI Ref NNN\" and \"Received Rs.X in your Kotak Bank AC XNNNN from payee@bank on ...\". The Kotlin parser maps payment-app QR-generated UPI ids (paytmqr.../ phonepeqr...@ybl etc.) to the app name via its bank-code table; that lookup is approximated here with pipeline setFieldWhen overrides for the known QR prefixes."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.kotak.bank",
+    "type": "sms-parser",
+    "name": "Kotak Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "dltPatterns": ["^[A-Z]{2}-KOTAKB-[ST]$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid"
+      ],
+      "requireAnyKeyword": [
+        "sent",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "to\\s+upi(?<value>[^@\\s]+)@\\S+\\s+on"
+        },
+        {
+          "re": "from\\s+upi(?<value>[^@\\s]+)@\\S+\\s+on"
+        },
+        {
+          "re": "to\\s+(?<value>[^@\\s]+)@\\S+\\s+on"
+        },
+        {
+          "re": "from\\s+(?<value>[^@\\s]+)@\\S+\\s+on"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "UPI\\s+Ref\\s+(?<value>[0-9]+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        },
+        {
+          "re": "Reference\\s+Number[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "AC\\s+[X*]*(?<value>[0-9]{4})(?:\\s|,|\\.)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account).*?(?<value>\\d+)(?:\\s|$)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "purchase"],
+      "income": ["credited", "deposited", "received", "refund", "cashback"]
+    },
+    "cardRules": {
+      "includeKeywords": [
+        "card ending",
+        "card xx",
+        "debit card",
+        "credit card",
+        "card no.",
+        "card number",
+        "card *",
+        "card x"
+      ],
+      "excludeKeywords": ["a/c", "account", "ac ", "acc "]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*",
+        "\\s+on\\s+\\d{2}.*",
+        "\\s+UPI.*",
+        "\\s+at\\s+\\d{2}:\\d{2}.*",
+        "\\s*-\\s*$",
+        "(\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(\\s+LTD\\.?|\\s+LIMITED)$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["sent", "from kotak"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["paytmqr"]
+        },
+        "field": "merchant",
+        "value": "Paytm"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["phonepeqr", "phonepe.qr"]
+        },
+        "field": "merchant",
+        "value": "PhonePe"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["amazonpayqr"]
+        },
+        "field": "merchant",
+        "value": "Amazon Pay"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["bharatpeqr"]
+        },
+        "field": "merchant",
+        "value": "BharatPe"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["mobikwikqr"]
+        },
+        "field": "merchant",
+        "value": "MobiKwik"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["freechargeqr"]
+        },
+        "field": "merchant",
+        "value": "Freecharge"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "paytm qr code upi sent",
+      "sender": "JD-KOTAKB-S",
+      "receivedAt": "2025-10-14T10:00:00.000Z",
+      "body": "Sent Rs.15.00 from Kotak Bank AC X1234 to paytmqr288005050101t74afkchmxjd@paytm on 14-10-25.UPI Ref 1234567890. Not you, https://kotak.com/KBANKT/Fraud",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "15.00",
+          "merchant": "Paytm",
+          "accountLast4": "1234",
+          "transactionType": "EXPENSE",
+          "reference": "1234567890"
+        }
+      }
+    },
+    {
+      "name": "phonepe qr code upi sent",
+      "sender": "JD-KOTAKB-S",
+      "receivedAt": "2025-10-15T10:00:00.000Z",
+      "body": "Sent Rs.100.00 from Kotak Bank AC X5678 to phonepeqr123456789xyz@ybl on 15-10-25.UPI Ref 9876543210. Not you, https://kotak.com/KBANKT/Fraud",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100.00",
+          "merchant": "PhonePe",
+          "accountLast4": "5678",
+          "transactionType": "EXPENSE",
+          "reference": "9876543210"
+        }
+      }
+    },
+    {
+      "name": "person-to-person upi with phone number",
+      "sender": "JD-KOTAKB-S",
+      "receivedAt": "2025-10-15T11:00:00.000Z",
+      "body": "Sent Rs.500.00 from Kotak Bank AC X9999 to 9876543210@paytm on 15-10-25.UPI Ref 1111111111. Not you, https://kotak.com/KBANKT/Fraud",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "9876543210",
+          "accountLast4": "9999",
+          "transactionType": "EXPENSE",
+          "reference": "1111111111"
+        }
+      }
+    },
+    {
+      "name": "upi received credit",
+      "sender": "JD-KOTAKB-S",
+      "receivedAt": "2025-10-14T12:00:00.000Z",
+      "body": "Received Rs.250.00 in your Kotak Bank AC X3333 from john.doe@oksbi on 14-10-25.UPI Ref 2222222222. Not you, https://kotak.com/KBANKT/Fraud",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "250.00",
+          "merchant": "john.doe",
+          "accountLast4": "3333",
+          "transactionType": "INCOME",
+          "reference": "2222222222"
+        }
+      }
+    },
+    {
+      "name": "standard debit with balance",
+      "sender": "JD-KOTAKB-S",
+      "receivedAt": "2025-10-15T13:00:00.000Z",
+      "body": "Rs.1000.00 debited from your Kotak Bank AC X4444 on 15-10-25. Avl Bal Rs.10000.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1000.00",
+          "merchant": "your Kotak Bank AC X4444",
+          "accountLast4": "4444",
+          "balance": "10000.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "JD-KOTAKB-S",
+      "receivedAt": "2025-10-16T09:00:00.000Z",
+      "body": "Your OTP for Kotak Bank netbanking transaction sent to you is 482913. Do not share it with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "upi collect request is filter-rejected",
+      "sender": "JD-KOTAKB-S",
+      "receivedAt": "2025-10-16T10:00:00.000Z",
+      "body": "Ramesh has requested Rs.350.00 from your Kotak Bank AC via UPI. Approve in the app. Ignore if already paid.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

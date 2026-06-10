@@ -1,0 +1,315 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro UnionBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/UnionBankParser.kt). Union Bank of India appends a \"Never Share OTP/PIN/CVV\" warning to genuine transaction SMS, so the Kotlin parser deliberately accepts any message that contains a transaction keyword even when \"OTP\" appears. We mirror that by using requireAnyKeyword (the Kotlin transaction-keyword list) with NO excludeKeywords — exclusions would wrongly veto the OTP warning text. Merchant priority in Kotlin is Mob Bk > ATM > UPI > VPA > \"to\" > \"from\"; the fixed-value branches (Mob Bk, ATM fallback) are pipeline setFieldWhen steps ordered so later steps reproduce the higher Kotlin priority."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.unionbank.bank",
+    "type": "sms-parser",
+    "name": "Union Bank of India",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["UNIONB", "UNIONBANK", "UBOI"],
+      "dltPatterns": ["^.*UNIONB.*$", "^.*UBOI.*$"]
+    },
+    "filter": {
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Rs[:.]?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "UPI[/:]?\\s*(?<value>[^,.\\s]+)"
+        },
+        {
+          "re": "VPA\\s+(?<value>[^@\\s]+)"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Avl|$)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Avl|$)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "ref\\s+no\\s+(?<value>\\w+)"
+        },
+        {
+          "re": "ref[:#]?\\s*(?<value>\\w+)"
+        },
+        {
+          "re": "reference[:#]?\\s*(?<value>\\w+)"
+        },
+        {
+          "re": "txn[:#]?\\s*(?<value>\\w+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "A/c\\s*[*X](?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "Account\\s*[*X](?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "Acc\\s*[*X](?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "A/c\\s+(?<value>\\d{4})",
+          "takeLast4": true
+        }
+      ],
+      "balance": [
+        {
+          "re": "Avl\\s+Bal\\s+Rs[:.]?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+Balance[:.]?\\s*Rs[:.]?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Balance[:.]?\\s*Rs[:.]?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Bal[:.]?\\s*Rs[:.]?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "nsccl",
+        "clearing corporation",
+        "groww",
+        "zerodha",
+        "upstox",
+        "kuvera",
+        "smallcase",
+        "mutual fund",
+        "demat",
+        "sovereign gold"
+      ],
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["credited", "deposited", "received", "refund", "cashback"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*",
+        "\\s+on\\s+\\d{2}.*",
+        "\\s+UPI.*",
+        "\\s+at\\s+\\d{2}:\\d{2}.*",
+        "\\s*-\\s*$",
+        "(\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(\\s+LTD\\.?|\\s+LIMITED)$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["vpa", "paytm"]
+        },
+        "field": "merchant",
+        "value": "Paytm"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["vpa", "phonepe"]
+        },
+        "field": "merchant",
+        "value": "PhonePe"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["vpa", "googlepay"]
+        },
+        "field": "merchant",
+        "value": "Google Pay"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["vpa", "gpay"]
+        },
+        "field": "merchant",
+        "value": "Google Pay"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["vpa", "amazon"]
+        },
+        "field": "merchant",
+        "value": "Amazon"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["vpa", "swiggy"]
+        },
+        "field": "merchant",
+        "value": "Swiggy"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["vpa", "zomato"]
+        },
+        "field": "merchant",
+        "value": "Zomato"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["atm"]
+        },
+        "field": "merchant",
+        "value": "ATM Withdrawal"
+      },
+      {
+        "kind": "extractFieldWhen",
+        "when": {
+          "containsAny": ["atm"]
+        },
+        "field": "merchant",
+        "extractors": [
+          {
+            "re": "at\\s+(?<value>[^.\\s]+(?:\\s+[^.\\s]+)*)(?:\\s+on|\\s+Avl|$)"
+          }
+        ]
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["mob bk"]
+        },
+        "field": "merchant",
+        "value": "Mobile Banking Transfer"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "mobile banking debit with ref and balance",
+      "sender": "AD-UNIONB-S",
+      "receivedAt": "2025-08-11T18:28:02.000Z",
+      "body": "A/c *1234 Debited for Rs:100.00 on 11-08-2025 18:28:02 by Mob Bk ref no 123456789000 Avl Bal Rs:12345.67 Never Share OTP/PIN/CVV -Union Bank of India",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100.00",
+          "merchant": "Mobile Banking Transfer",
+          "accountLast4": "1234",
+          "balance": "12345.67",
+          "reference": "123456789000",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "neft credit from counterparty",
+      "sender": "VM-UNIONB-S",
+      "receivedAt": "2026-06-01T10:15:00.000Z",
+      "body": "A/c X5678 Credited for Rs:25,000.00 by NEFT from ACME CORP on 01-06-2026 ref no 998877665544 Avl Bal Rs:50,000.00 Never Share OTP/PIN/CVV -Union Bank of India",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25000.00",
+          "merchant": "ACME CORP",
+          "accountLast4": "5678",
+          "balance": "50000.00",
+          "reference": "998877665544",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal with location",
+      "sender": "JD-UNIONB-T",
+      "receivedAt": "2026-06-05T18:30:11.000Z",
+      "body": "Rs:2000.00 withdrawn from A/c *4321 on 05-06-2026 at CITY ATM Avl Bal Rs:8000.00 -Union Bank of India",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2000.00",
+          "merchant": "CITY ATM",
+          "accountLast4": "4321",
+          "balance": "8000.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "upi debit with merchant handle",
+      "sender": "UNIONBANK",
+      "receivedAt": "2026-06-09T12:00:00.000Z",
+      "body": "A/c *1234 Debited for Rs:599.00 on 09-06-2026 by UPI/SWIGGY ref no 412345678901 Avl Bal Rs:4401.00 -Union Bank of India",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "599.00",
+          "merchant": "SWIGGY",
+          "accountLast4": "1234",
+          "balance": "4401.00",
+          "reference": "412345678901",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "vpa debit mapped to known payment app",
+      "sender": "BV-UNIONB-S",
+      "receivedAt": "2026-06-09T09:45:00.000Z",
+      "body": "Rs:350.00 debited from A/c *1234 to VPA paytm-7001@ptys on 09-06-2026 ref no 512345678901 Avl Bal Rs:1000.00 -Union Bank of India",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "350.00",
+          "merchant": "Paytm",
+          "accountLast4": "1234",
+          "balance": "1000.00",
+          "reference": "512345678901",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "otp-only message is filter-rejected",
+      "sender": "AD-UNIONB-S",
+      "receivedAt": "2026-06-09T08:00:00.000Z",
+      "body": "Your OTP for Union Bank net banking login is 458912. Valid for 10 minutes. Never Share OTP/PIN/CVV with anyone -Union Bank of India",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

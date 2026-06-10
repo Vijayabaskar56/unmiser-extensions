@@ -1,0 +1,210 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro TigoPesaParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/TigoPesaParser.kt). Tigo Pesa / Mixx by Yas is a Tanzanian mobile-money wallet, so like JioPay there is no real bank account number in the SMS — transactions fall back to the \"0000\" wallet account so resolution can match a linked wallet. Faithfulness notes vs the Kotlin parser: - Kotlin's isTransactionMessage requires \"tsh\" AND one of the transaction keywords; the engine filter only supports OR, so the \"tsh\" requirement is dropped (a keyword-bearing message without TSh would fail amount extraction and surface as REVIEW instead of REJECTED). - The agent pattern in Kotlin captures only the name and re-prefixes \"Agent - \"; here the extractor captures the \"Agent - NAME\" span verbatim, which yields the same value for the canonical \"Agent - NAME\" format. - The TIPS source mapping (Selcom/NMB/CRDB -> friendly names) is expressed as pipeline setFieldWhen steps keyed on the whole body instead of just the captured TIPS source token."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "tz.tigopesa.wallet",
+    "type": "sms-parser",
+    "name": "Tigo Pesa",
+    "country": "TZ",
+    "currency": "TZS",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["TIGO"],
+      "dltPatterns": ["TIGO\\s?PESA", "MIXX\\s?BY\\s?YAS"]
+    },
+    "filter": {
+      "requireAnyKeyword": [
+        "cash-in",
+        "you have sent",
+        "you have paid",
+        "you have received",
+        "transfer successful",
+        "is successful",
+        "new balance"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Cash-In of TSh\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        },
+        {
+          "re": "sent TSh\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        },
+        {
+          "re": "received TSh\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        },
+        {
+          "re": "paid TSh\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        },
+        {
+          "re": "TSh\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "from\\s+(?<value>Agent\\s*-?\\s*[A-Z][A-Za-z\\s]+?)\\s+is\\s+successful"
+        },
+        {
+          "re": "to\\s+[\\dX]+\\s*-\\s*(?<value>[A-Z][A-Za-z\\s]+?)(?:\\.|Total|$)"
+        },
+        {
+          "re": "paid\\s+TSh\\s*[0-9,]+(?:\\.[0-9]{2})?\\s+to\\s+(?<value>[A-Za-z0-9\\s&]+?)(?:\\.|Charges|$)"
+        },
+        {
+          "re": "from\\s+(?<value>TIPS\\.[A-Za-z0-9_.]+)"
+        },
+        {
+          "re": "to\\s+(?<value>[A-Z][A-Za-z\\s]+?)(?:\\.|,|Charges|Total|$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "New balance is TSh\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "TxnId:\\s*(?<value>\\d+)"
+        },
+        {
+          "re": "Trnx ID:\\s*(?<value>\\d+)"
+        },
+        {
+          "re": "with TxnId:\\s*\\d+\\.\\s*(?<value>[A-Z0-9_]+)"
+        }
+      ]
+    },
+    "typeRules": {
+      "income": ["cash-in", "you have received", "received tsh"],
+      "expense": ["you have sent", "you have paid"]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s*\\(.*?\\)\\s*$", "\\s+on\\s+\\d{2}/.*", "\\s*-\\s*$", "^\\s*-\\s*"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["from TIPS."]
+        },
+        "field": "merchant",
+        "value": "TIPS Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["from TIPS.", "Selcom"]
+        },
+        "field": "merchant",
+        "value": "Selcom (TIPS Transfer)"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["from TIPS.", "NMB"]
+        },
+        "field": "merchant",
+        "value": "NMB Bank (TIPS Transfer)"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["from TIPS.", "CRDB"]
+        },
+        "field": "merchant",
+        "value": "CRDB Bank (TIPS Transfer)"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "accountLast4",
+        "value": "0000"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "cash-in from agent",
+      "sender": "TIGOPESA(smsfp)",
+      "receivedAt": "2023-08-16T15:19:00.000Z",
+      "body": "Cash-In of TSh 100,000 from Agent - LUCY SUKUM is successful. New balance is TSh 100,000. TxnId: 13411949026. 16/08/23 15:19. Dial150 01# or use Tigo Pesa App. No Levy while sending money with Tigo Pesa",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100000",
+          "merchant": "Agent - LUCY SUKUM",
+          "balance": "100000",
+          "transactionType": "INCOME",
+          "reference": "13411949026",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "sent money with detailed charges",
+      "sender": "TIGOPESA(smsfp)",
+      "receivedAt": "2023-08-14T14:55:00.000Z",
+      "body": "You have sent TSh 25,000 with CashOut fee TSh 2,156 to 255713XXXXXX - BENEDICTA MREMA. Total Charges TSh 380.(Fees TSh 380, Levy TSh 0), VAT TSh 58. TxnID: 27755640833. 14/08/23 14:55. New balance is TSh 481,801. Thank you for using Tigo Pesa.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25000",
+          "merchant": "BENEDICTA MREMA",
+          "balance": "481801",
+          "transactionType": "EXPENSE",
+          "reference": "27755640833",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "merchant payment / lipa",
+      "sender": "TIGOPESA(smsfp)",
+      "receivedAt": "2023-08-19T11:20:00.000Z",
+      "body": "You have paid TSh 131,000 to DIAPERS AND WIPES SUPPLIERS. Charges TSh 2,000. VAT TSh 305. Trnx ID: 63425443091. 19/08/23 11:20. Your New balance is TSh 467,372. Thank you for using Tigo Pesa.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "131000",
+          "merchant": "DIAPERS AND WIPES SUPPLIERS",
+          "balance": "467372",
+          "transactionType": "EXPENSE",
+          "reference": "63425443091",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "incoming TIPS / bank transfer (Mixx by Yas)",
+      "sender": "MIXX BY YAS",
+      "receivedAt": "2025-12-30T12:57:00.000Z",
+      "body": "Transfer Successful. New balance is TSh 97,000. You have received TSh 97,000 from TIPS.Selcom_MFB.2.Tigo, with TxnId: 25693126312543. 035_12307E6LF. 30/12/25 12:57.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "97000",
+          "merchant": "Selcom (TIPS Transfer)",
+          "balance": "97000",
+          "transactionType": "INCOME",
+          "reference": "25693126312543",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "promotional message is filter-rejected",
+      "sender": "TIGOPESA",
+      "receivedAt": "2023-09-01T09:00:00.000Z",
+      "body": "Karibu Tigo Pesa! Dial *150*01# to check our latest bundles and win airtime bonuses this week. T&C apply.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

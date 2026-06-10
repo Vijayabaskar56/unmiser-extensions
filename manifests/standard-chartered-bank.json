@@ -1,0 +1,276 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro StandardCharteredBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/StandardCharteredBankParser.kt) Formats: UPI debit (\"Your a/c XX3421 is debited for Rs. 302.00 ... and credited to a/c XX1465 (UPI Ref no ...)\") and NEFT/RTGS/IMPS credit (\"there is an NEFT credit of INR 48,796.00 in your account 123xxxx7655 ... Available Balance:INR 97,885.05\"). Deviation from the Kotlin parser: it composes the UPI-debit merchant as \"UPI Transfer to XX1465\"; the declarative engine can only capture text that exists in the body, so the merchant here is the destination account token (\"XX1465\") instead."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.standardchartered.bank",
+    "type": "sms-parser",
+    "name": "Standard Chartered Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["SCBANK", "StanChart"],
+      "dltPatterns": [
+        "^[A-Z]{2}-SCBANK-[A-Z]$",
+        ".*SCBANK.*",
+        ".*STANCHART.*",
+        ".*STANDARD\\s?CHARTERED.*"
+      ]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "is debited for",
+        "is credited for",
+        "neft credit",
+        "rtgs credit",
+        "imps credit",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "is debited for Rs\\.\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:NEFT|RTGS|IMPS)\\s+credit\\s+of\\s+INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "is credited for Rs\\.\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "INR\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "and credited to a/c (?<value>[X*]+\\d+)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Available Balance:\\s*INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Avl|Available)\\s+Bal(?:ance)?:?\\s*(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "UPI Ref no (?<value>\\d+)"
+        },
+        {
+          "re": "\\bRef\\s*(?:No)?[.:\\s]+(?<value>[A-Z0-9]{6,})"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "Your a/c [X*]+(?<value>\\d{4})"
+        },
+        {
+          "re": "in your account (?:\\d+[xX*]+)?(?<value>\\d{4})"
+        },
+        {
+          "re": "a/c\\s+[X*]*(?<value>\\d{4,})",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": ["iccl", "nsccl", "groww", "zerodha", "sip", "mutual fund", "demat"],
+      "expense": [
+        "is debited for",
+        "debited",
+        "withdrawn",
+        "spent",
+        "charged",
+        "paid",
+        "purchase",
+        "deducted"
+      ],
+      "income": [
+        "neft credit",
+        "rtgs credit",
+        "imps credit",
+        "is credited for",
+        "credited",
+        "deposited",
+        "received",
+        "refund"
+      ]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s+PVT\\.?\\s+LTD\\.?$", "\\s+LTD\\.?$"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["neft credit"]
+        },
+        "field": "merchant",
+        "value": "NEFT Credit"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["rtgs credit"]
+        },
+        "field": "merchant",
+        "value": "RTGS Credit"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["imps credit"]
+        },
+        "field": "merchant",
+        "value": "IMPS Credit"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "upi debit transfer",
+      "sender": "VM-SCBANK-S",
+      "receivedAt": "2025-12-03T15:49:00.000Z",
+      "body": "Your a/c XX3421 is debited for Rs. 302.00 on 03-12-2025 15:49 and credited to a/c XX1465 (UPI Ref no 487597904232).Plz call 18002586465 if not done by you.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "302.00",
+          "merchant": "XX1465",
+          "accountLast4": "3421",
+          "transactionType": "EXPENSE",
+          "reference": "487597904232"
+        }
+      }
+    },
+    {
+      "name": "upi debit transfer second example",
+      "sender": "VD-SCBANK-S",
+      "receivedAt": "2025-11-29T22:49:00.000Z",
+      "body": "Your a/c XX1234 is debited for Rs. 30.00 on 29-11-2025 22:49 and credited to a/c XX0025 (UPI Ref no 764379954202).Plz call 18002586465 if not done by you.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "30.00",
+          "merchant": "XX0025",
+          "accountLast4": "1234",
+          "transactionType": "EXPENSE",
+          "reference": "764379954202"
+        }
+      }
+    },
+    {
+      "name": "neft credit with balance",
+      "sender": "JK-SCBANK-S",
+      "receivedAt": "2025-11-01T09:00:00.000Z",
+      "body": "Dear Customer, there is an NEFT credit of INR 48,796.00 in your account 123xxxx7655 on 1/11/2025.Available Balance:INR 97,885.05 -StanChart",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "48796.00",
+          "merchant": "NEFT Credit",
+          "accountLast4": "7655",
+          "balance": "97885.05",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "upi debit large amount with comma",
+      "sender": "VM-SCBANK-S",
+      "receivedAt": "2025-12-01T10:30:00.000Z",
+      "body": "Your a/c XX5678 is debited for Rs. 1,250.00 on 01-12-2025 10:30 and credited to a/c XX9999 (UPI Ref no 123456789012).Plz call 18002586465 if not done by you.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1250.00",
+          "merchant": "XX9999",
+          "accountLast4": "5678",
+          "transactionType": "EXPENSE",
+          "reference": "123456789012"
+        }
+      }
+    },
+    {
+      "name": "rtgs credit with balance",
+      "sender": "SCBANK",
+      "receivedAt": "2025-12-15T11:00:00.000Z",
+      "body": "Dear Customer, there is an RTGS credit of INR 100,000.00 in your account 456xxxx1234 on 15/12/2025.Available Balance:INR 250,000.00 -StanChart",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100000.00",
+          "merchant": "RTGS Credit",
+          "accountLast4": "1234",
+          "balance": "250000.00",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "imps credit with balance",
+      "sender": "VD-SCBANK-S",
+      "receivedAt": "2025-12-10T13:00:00.000Z",
+      "body": "Dear Customer, there is an IMPS credit of INR 5,000.00 in your account 789xxxx5555 on 10/12/2025.Available Balance:INR 15,000.00 -StanChart",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "merchant": "IMPS Credit",
+          "accountLast4": "5555",
+          "balance": "15000.00",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "VM-SCBANK-S",
+      "receivedAt": "2025-12-05T09:30:00.000Z",
+      "body": "Your OTP for txn of Rs. 500.00 at MERCHANT is 482910. Do not share it with anyone. -StanChart",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

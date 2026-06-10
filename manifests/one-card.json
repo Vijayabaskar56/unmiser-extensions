@@ -1,0 +1,244 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro OneCardParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/OneCardParser.kt) plus the BankParser.kt base-class fallbacks it delegates to. OneCard is a credit card, so like the original parser every parsed transaction is typed CREDIT (the Kotlin parse() copies type = CREDIT)."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.onecard.card",
+    "type": "sms-parser",
+    "name": "OneCard",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["ONECRD", "ONECARD", "CP-OneCrd-S"],
+      "dltPatterns": ["^.*ONECRD.*$", "^.*ONECARD.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "offer",
+        "cashback offer",
+        "get reward",
+        "statement",
+        "due date",
+        "bill generated",
+        "otp",
+        "one time password",
+        "verification code",
+        "discount",
+        "win "
+      ],
+      "requireAnyKeyword": [
+        "on card ending",
+        "spent",
+        "made a",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "for\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+at"
+        },
+        {
+          "re": "of\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+on"
+        },
+        {
+          "re": "spent\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "at\\s+(?<value>[^•\\n]+?)\\s+on\\s+card"
+        },
+        {
+          "re": "\\bon\\s+(?<value>[^•\\n]+?)\\s+on\\s+card"
+        },
+        {
+          "re": "at\\s+(?<value>[^•\\n]+?)\\s+on"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "card\\s+ending\\s+[X]*(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "on\\s+card\\s+[X]*(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]+\\s*)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]+\\s*)?(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "Available\\s+limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avl\\s+Lmt:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avail\\s+Limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+Credit\\s+Limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:^|\\s)Limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ]
+    },
+    "cardRules": {
+      "includeKeywords": ["card ending", "credit card", "debit card", "card xx", "card x"],
+      "excludeKeywords": ["a/c", "saving account", "current account"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*$",
+        "\\s+on\\s+\\d{2}.*$",
+        "\\s+UPI.*$",
+        "\\s+at\\s+\\d{2}:\\d{2}.*$",
+        "\\s*-\\s*$",
+        "(?:\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(?:\\s+LTD\\.?|\\s+LIMITED)$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "fallbackField",
+        "field": "transactionType",
+        "value": "CREDIT"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "fuel transaction (at MERCHANT on card ending)",
+      "sender": "CP-OneCrd-S",
+      "receivedAt": "2026-06-01T09:00:00.000Z",
+      "body": "You've fueled up for Rs. 2,500.00 at INDIAN OIL PETROL PUMP on card ending 1234.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2500.00",
+          "merchant": "INDIAN OIL PETROL PUMP",
+          "accountLast4": "1234",
+          "transactionType": "CREDIT",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "booking transaction with available limit",
+      "sender": "VM-ONECRD-S",
+      "receivedAt": "2026-06-02T12:30:00.000Z",
+      "body": "You've made a booking of Rs. 1,499.00 on MAKEMYTRIP on card ending 5678. Avl Lmt: Rs. 48,501.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1499.00",
+          "merchant": "MAKEMYTRIP",
+          "accountLast4": "5678",
+          "creditLimit": "48501.00",
+          "transactionType": "CREDIT",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "general transaction format",
+      "sender": "ONECARD",
+      "receivedAt": "2026-06-03T18:45:00.000Z",
+      "body": "You've made a transaction of Rs. 750.50 on SWIGGY on card ending 9012.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "750.50",
+          "merchant": "SWIGGY",
+          "accountLast4": "9012",
+          "transactionType": "CREDIT",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "spent format",
+      "sender": "AX-OneCard",
+      "receivedAt": "2026-06-04T20:10:00.000Z",
+      "body": "You've spent Rs. 320.00 at STARBUCKS COFFEE on card ending 4321.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "320.00",
+          "merchant": "STARBUCKS COFFEE",
+          "accountLast4": "4321",
+          "transactionType": "CREDIT",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "statement/due-date reminder is filter-rejected",
+      "sender": "CP-OneCrd-S",
+      "receivedAt": "2026-06-05T08:00:00.000Z",
+      "body": "Your OneCard statement is ready. Total amount due Rs. 5,000.00. Pay by due date 15-06-2026 to avoid late fees.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,302 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro GSBBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/GSBBankParser.kt), which is a thin subclass of BaseThailandBankParser.kt: canHandle matches the exact sender \"GSB\" or any sender containing \"GOVERNMENT SAVINGS\" / \"GOVT SAVINGS\"; everything else (THB amounts, Thai/English type keywords, \"คงเหลือ/Bal\" balances, \"บช/A/C xNNNN\" accounts, \"at/ร้าน MERCHANT\" merchants, the \"Available limit/วงเงินคงเหลือ\" credit limit, and the OTP/promo skip list) comes from the Thai base class, with reference/account fallbacks inherited from BankParser.kt's CompiledPatterns."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "th.gsb.bank",
+    "type": "sms-parser",
+    "name": "Government Savings Bank",
+    "country": "TH",
+    "currency": "THB",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["GSB"],
+      "dltPatterns": ["^.*GOVERNMENT SAVINGS.*$", "^.*GOVT SAVINGS.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "รหัส",
+        "ยืนยัน",
+        "สมัคร",
+        "โปรโมชั่น",
+        "promotion",
+        "cashback offer"
+      ],
+      "requireAnyKeyword": [
+        "เงินเข้า",
+        "เงินออก",
+        "ถอนเงิน",
+        "โอนเงิน",
+        "ใช้จ่าย",
+        "เงินฝาก",
+        "รับเงิน",
+        "คงเหลือ",
+        "บาท",
+        "ยอดใช้จ่าย",
+        "withdrawal",
+        "deposit",
+        "transfer",
+        "payment",
+        "spent",
+        "receive",
+        "bal",
+        "thb",
+        "card transaction",
+        "card payment",
+        "credit card spending",
+        "available limit"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:THB|฿)\\s*(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*USD"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "(?:at|ร้าน)\\s+(?<value>[A-Za-z0-9\\s&._-]+?)(?:\\s+(?:A/C|บช|Bal|คงเหลือ|Available|on|$))"
+        },
+        {
+          "re": "at\\s+(?<value>[A-Za-z0-9\\s&._-]+)$"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        },
+        {
+          "re": "Reference\\s+Number[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx\\*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx\\*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account).*?(?<value>\\d+)(?:\\s|$)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/C|บช)\\s*x(?<value>\\d{4})",
+          "takeLast4": true
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "(?:Available limit|วงเงินคงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "indian clearing corporation",
+        "nsccl",
+        "nse clearing",
+        "clearing corporation",
+        "nach",
+        "ach",
+        "ecs",
+        "groww",
+        "zerodha",
+        "upstox",
+        "kite",
+        "kuvera",
+        "paytm money",
+        "etmoney",
+        "coin by zerodha",
+        "smallcase",
+        "angel one",
+        "angel broking",
+        "5paisa",
+        "icici securities",
+        "icici direct",
+        "hdfc securities",
+        "kotak securities",
+        "motilal oswal",
+        "sharekhan",
+        "edelweiss",
+        "axis direct",
+        "sbi securities",
+        "mutual fund",
+        "sip",
+        "elss",
+        "ipo",
+        "folio",
+        "demat",
+        "stockbroker",
+        "digital gold",
+        "sovereign gold",
+        "nse",
+        "bse",
+        "cdsl",
+        "nsdl"
+      ],
+      "credit": ["credit card spending", "ยอดใช้จ่ายต่างประเทศ", "ยอดใช้จ่าย"],
+      "expense": [
+        "เงินออก",
+        "ถอนเงิน",
+        "ถอนเงินสด",
+        "โอนเงินออก",
+        "โอนเงินผ่าน",
+        "ใช้จ่ายบัตร",
+        "ใช้จ่าย",
+        "withdrawal",
+        "payment",
+        "you spent",
+        "transfer out",
+        "card payment",
+        "card transaction",
+        "atm withdrawal"
+      ],
+      "income": [
+        "เงินเข้า",
+        "เงินฝาก",
+        "รับเงิน",
+        "โอนเงินเข้า",
+        "รับเงินพร้อมเพย์",
+        "รับเงินโอน",
+        "เงินฝากเข้า",
+        "deposit",
+        "receive",
+        "transfer in",
+        "transfer received"
+      ]
+    },
+    "cardRules": {
+      "includeKeywords": [
+        "credit card",
+        "บัตรเครดิต",
+        "card spending",
+        "card payment",
+        "card transaction",
+        "ใช้จ่ายบัตร",
+        "ยอดใช้จ่าย",
+        "card ending",
+        "debit card"
+      ],
+      "excludeKeywords": ["a/c", "account", "saving account"]
+    },
+    "cleaning": {
+      "stripPatterns": [],
+      "minMerchantLength": 2,
+      "commonWords": ["ผ่าน", "โดย", "จาก", "ที่", "ไปยัง", "ถึง"]
+    }
+  },
+  "fixtures": [
+    {
+      "name": "thai deposit with account and balance",
+      "sender": "GSB",
+      "receivedAt": "2026-06-01T09:10:00.000Z",
+      "body": "GSB: เงินฝากเข้า 2,500.00 บาท บช x1122 คงเหลือ 9,300.00 บาท",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "2500.00",
+          "transactionType": "INCOME",
+          "accountLast4": "1122",
+          "balance": "9300.00"
+        }
+      }
+    },
+    {
+      "name": "thai withdrawal with account",
+      "sender": "GSB",
+      "receivedAt": "2026-06-02T16:45:00.000Z",
+      "body": "GSB: ถอนเงิน 1,000.00 บาท บช x1122",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "1000.00",
+          "transactionType": "EXPENSE",
+          "accountLast4": "1122"
+        }
+      }
+    },
+    {
+      "name": "english card transaction with merchant and balance",
+      "sender": "GSB",
+      "receivedAt": "2026-06-03T13:40:00.000Z",
+      "body": "GSB: Card transaction 850.00 THB at TESCO LOTUS Bal 12,450.00 THB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "850.00",
+          "merchant": "TESCO LOTUS",
+          "transactionType": "EXPENSE",
+          "balance": "12450.00"
+        }
+      }
+    },
+    {
+      "name": "credit card spending with available limit",
+      "sender": "GSB",
+      "receivedAt": "2026-06-04T19:22:00.000Z",
+      "body": "GSB: Credit card spending 1,500.00 THB at BIG C SUPERCENTER Available limit 48,500.00 THB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1500.00",
+          "merchant": "BIG C SUPERCENTER",
+          "transactionType": "CREDIT",
+          "creditLimit": "48500.00"
+        }
+      }
+    },
+    {
+      "name": "english transfer received with a/c fallback",
+      "sender": "GSB",
+      "receivedAt": "2026-06-05T11:30:00.000Z",
+      "body": "GSB: Transfer received 3,200.00 THB A/C x8844 Bal 15,820.45 THB",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "3200.00",
+          "transactionType": "INCOME",
+          "accountLast4": "8844",
+          "balance": "15820.45"
+        }
+      }
+    },
+    {
+      "name": "thai otp message is filter-rejected",
+      "sender": "GSB",
+      "receivedAt": "2026-06-06T09:00:00.000Z",
+      "body": "GSB: รหัส OTP ของคุณคือ 123456 ใช้สำหรับยืนยันการทำรายการ ห้ามบอกผู้อื่น",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

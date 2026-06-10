@@ -1,0 +1,381 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro JuspayParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/JuspayParser.kt). Juspay is the payment rail behind Amazon Pay wallet SMS (\"Apay Wallet\"), so the bank name is \"Amazon Pay\" like the original parser. Porting notes: - canHandle uses contains(\"JUSPAY\"), contains(\"APAY\") and the exact \"AMAZON PAY\" sender; the contains() checks become dltPatterns. - The Kotlin merchant keyword mapping is first-match-wins (amazon -> flipkart -> ... -> wallet); the pipeline's setFieldWhen steps are last-write-wins, so the steps below are listed in REVERSE priority. They are guarded with notContainsAny [\"successful at\"] because the regex-extracted merchant (\"successful at <name>\") outranks keywords. - extractTransactionType is also first-match-wins with EXPENSE keywords before CREDIT keywords; ported as reverse-ordered setFieldWhen steps instead of typeRules (whose fixed credit>expense priority would flip e.g. a body containing both \"payment\" and \"received\"). - Amazon Pay is a wallet: messages carry no account number, so accountLast4 falls back to \"0000\" (see jiopay.ts for the rationale)."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.amazonpay.wallet",
+    "type": "sms-parser",
+    "name": "Amazon Pay",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["JUSPAY", "APAY", "AMAZON PAY"],
+      "dltPatterns": ["^.*JUSPAY.*$", "^.*APAY.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited for",
+        "payment of rs",
+        "using apay balance",
+        "transaction reference number",
+        "updated balance is",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "debited\\s+for\\s+INR\\s+(?<value>[0-9,]+(?:\\.[0-9]{1,2})?)"
+        },
+        {
+          "re": "Payment\\s+of\\s+Rs\\s+(?<value>[0-9,]+(?:\\.[0-9]{1,2})?)"
+        },
+        {
+          "re": "Rs\\s+(?<value>[0-9,]+(?:\\.[0-9]{1,2})?)"
+        },
+        {
+          "re": "INR\\s+(?<value>[0-9,]+(?:\\.[0-9]{1,2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "successful\\s+at\\s+(?<value>.+?)(?:\\.\\s*Updated|\\s*\\.\\s*Updated|\\.(?:\\s|$))"
+        }
+      ],
+      "reference": [
+        {
+          "re": "Transaction\\s+Reference\\s+Number\\s+is\\s+(?<value>\\d{12})"
+        },
+        {
+          "re": "Reference\\s+(?:Number|No)[:\\s]+(?<value>\\d{12})"
+        }
+      ]
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["wallet"],
+          "notContainsAny": ["successful at"]
+        },
+        "field": "merchant",
+        "value": "Amazon Pay Transaction"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["blinkit"],
+          "notContainsAny": ["successful at"]
+        },
+        "field": "merchant",
+        "value": "Blinkit"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["zepto"],
+          "notContainsAny": ["successful at"]
+        },
+        "field": "merchant",
+        "value": "Zepto"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["uber"],
+          "notContainsAny": ["successful at"]
+        },
+        "field": "merchant",
+        "value": "Uber"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["ola"],
+          "notContainsAny": ["successful at"]
+        },
+        "field": "merchant",
+        "value": "Ola"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["zomato"],
+          "notContainsAny": ["successful at"]
+        },
+        "field": "merchant",
+        "value": "Zomato"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["swiggy"],
+          "notContainsAny": ["successful at"]
+        },
+        "field": "merchant",
+        "value": "Swiggy"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["flipkart"],
+          "notContainsAny": ["successful at"]
+        },
+        "field": "merchant",
+        "value": "Flipkart"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["amazon"],
+          "notContainsAny": ["successful at"]
+        },
+        "field": "merchant",
+        "value": "Amazon"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "merchant",
+        "value": "Amazon Pay"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["received"]
+        },
+        "field": "transactionType",
+        "value": "CREDIT"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["refunded"]
+        },
+        "field": "transactionType",
+        "value": "CREDIT"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credited"]
+        },
+        "field": "transactionType",
+        "value": "CREDIT"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["charged"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["payment"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["debited"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "accountLast4",
+        "value": "0000"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "apay wallet debit transaction",
+      "sender": "JUSPAY",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Your Apay Wallet balance is debited for INR 250.00 Transaction Reference Number is 123456789012 - Powered by Juspay",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "250.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Amazon Pay Transaction",
+          "reference": "123456789012",
+          "accountLast4": "0000",
+          "currency": "INR"
+        }
+      }
+    },
+    {
+      "name": "payment using apay balance at generic merchant",
+      "sender": "APAY",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Payment of Rs 150.50 using Apay Balance successful at merchant. Updated Balance is Rs 850.00 - SMS by Juspay",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "150.50",
+          "transactionType": "EXPENSE",
+          "merchant": "merchant",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "amazon transaction with comma amount",
+      "sender": "JUSPAY",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Payment of Rs 1,250.00 using Apay Balance successful at Amazon. Updated Balance is Rs 2,500.00 - SMS by Juspay",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1250.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Amazon"
+        }
+      }
+    },
+    {
+      "name": "zepto delivery via apay",
+      "sender": "APAY",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Payment of Rs 85.25 using Apay Balance successful at Zepto. Updated Balance is Rs 1,200.00 - SMS by Juspay",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "85.25",
+          "transactionType": "EXPENSE",
+          "merchant": "Zepto"
+        }
+      }
+    },
+    {
+      "name": "large amount via amazon pay sender",
+      "sender": "AMAZON PAY",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Payment of Rs 15,000.00 using Apay Balance successful at Amazon. Updated Balance is Rs 25,000.00 - SMS by Juspay",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "15000.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Amazon"
+        }
+      }
+    },
+    {
+      "name": "multi-word merchant name",
+      "sender": "JUSPAY",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Payment of Rs 750 using Apay Balance successful at Big Bazaar. Updated Balance is Rs 2500 - SMS by Juspay",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "750",
+          "transactionType": "EXPENSE",
+          "merchant": "Big Bazaar"
+        }
+      }
+    },
+    {
+      "name": "merchant name with special characters",
+      "sender": "APAY",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Payment of Rs 1200 using Apay Balance successful at D'Mart Store. Updated Balance is Rs 3500 - SMS by Juspay",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1200",
+          "transactionType": "EXPENSE",
+          "merchant": "D'Mart Store"
+        }
+      }
+    },
+    {
+      "name": "swiggy payment via dlt-style juspay sender",
+      "sender": "XX-JUSPAY-X",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Payment of Rs 350.00 using Apay Balance successful at Swiggy. Updated Balance is Rs 650.00 - SMS by Juspay",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "350.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Swiggy"
+        }
+      }
+    },
+    {
+      "name": "wallet debit with alternate reference format",
+      "sender": "JM-JUSPAY-A",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Your Apay Wallet balance is debited for INR 450.75 Transaction Reference Number is 987654321098 - Powered by Juspay",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "450.75",
+          "transactionType": "EXPENSE",
+          "merchant": "Amazon Pay Transaction",
+          "reference": "987654321098"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "JUSPAY",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "123456 is your OTP to add money to your Apay Wallet. Do not share it with anyone - Powered by Juspay",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "cashback offer promo is filter-rejected",
+      "sender": "APAY",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Amazon Pay offer: Get 10% cashback offer up to Rs 100 on your next recharge using Apay Balance. T&C apply.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

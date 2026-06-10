@@ -1,0 +1,328 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro IDFCFirstBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/IDFCFirstBankParser.kt). Formats covered: \"Your A/C XXXXXXXXXXX is debited by INR 68.00 on 06/08/25 17:36. New Bal :INR XXXXX.00\" \"Your A/C XXXXXXXXXXX is credited by INR 500.00 on 06/08/25 17:36. New Bal :INR XXXXX.00\" \"Transaction Successful! EUR 500.00 spent on your IDFC FIRST Bank Credit Card ending XXXX at MERCHANT on DD-MMM-YYYY\" Known deviations from the Kotlin parser (engine limitations, noted in fixtures): - The Kotlin parser extracts a dynamic currency (\"EUR 500.00 spent\" -> EUR) for foreign credit-card transactions; the manifest engine always reports the manifest currency (INR). - Kotlin prefixes channel merchants (\"UPI - vpa@bank\", \"IMPS Transfer - Mobile XXXnnn\", \"ATM - SB1234\", \"Cash Deposit - ATM <id>\"); the engine cannot prepend literals to extracted groups, so the UPI VPA is kept bare and the channel fallbacks are static labels. - Kotlin only extracts the available limit for CREDIT-type messages (card-bill credits), which never occur for these formats, so creditLimit is omitted."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.idfcfirst.bank",
+    "type": "sms-parser",
+    "name": "IDFC First Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["IDFCBK", "IDFCFB", "IDFC"],
+      "dltPatterns": ["^.*IDFCBK.*$", "^.*IDFCFB.*$", "^.*IDFC.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid"
+      ],
+      "requireAnyKeyword": [
+        "debit",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid",
+        "interest"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "[A-Z]{3}\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+spent"
+        },
+        {
+          "re": "Debit\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "debited\\s+by\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "debited\\s+by\\s+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "credited\\s+by\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "credited\\s+with\\s+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "credited\\s+by\\s+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "interest\\s+of\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "(?:to|at|for)\\s+(?<value>[A-Z][A-Z0-9\\s&.-]+?)(?:\\s+on|\\s+New|\\.|,|$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "New\\s+Bal\\s*:\\s*(?:INR|Rs\\.?)\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "New\\s+balance\\s+is\\s+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Updated\\s+balance\\s+is\\s+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "IMPS\\s+Ref\\s+no\\s+(?<value>\\d+)"
+        },
+        {
+          "re": "UPI[:/]\\s*(?<value>[0-9]+)"
+        },
+        {
+          "re": "(?:txn|transaction)\\s*(?:id|ref|no)[:\\s]*(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "Credit\\s+Card\\s+ending\\s+[X]*(?<value>\\d{4})"
+        },
+        {
+          "re": "A/C\\s+[X]*(?<value>\\d{3,4})",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["debit", "spent", "withdrawn", "withdrawal", "charged", "paid", "deducted"],
+      "income": ["credited", "deposited", "deposit", "received", "refund", "monthly interest"]
+    },
+    "cardRules": {
+      "includeKeywords": ["card ending", "card xx", "debit card", "credit card", "card no."],
+      "excludeKeywords": ["a/c", "account", "saving account", "current account"]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s+PVT\\.?\\s+LTD\\.?$", "\\s+LTD\\.?$", "[-\\s]+$"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["ATM"]
+        },
+        "field": "merchant",
+        "value": "ATM Transaction"
+      },
+      {
+        "kind": "extractFieldWhen",
+        "when": {
+          "containsAny": ["ATM"]
+        },
+        "field": "merchant",
+        "extractors": [
+          {
+            "re": "ATM\\s+(?<value>[A-Z]{2}\\d+)"
+          }
+        ]
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["RTGS"]
+        },
+        "field": "merchant",
+        "value": "RTGS Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["NEFT"]
+        },
+        "field": "merchant",
+        "value": "NEFT Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["IMPS"]
+        },
+        "field": "merchant",
+        "value": "IMPS Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["UPI"]
+        },
+        "field": "merchant",
+        "value": "UPI Transaction"
+      },
+      {
+        "kind": "extractFieldWhen",
+        "when": {
+          "containsAny": ["UPI"]
+        },
+        "field": "merchant",
+        "extractors": [
+          {
+            "re": "(?:to|from|at)\\s+(?<value>[a-zA-Z0-9._-]+@[a-zA-Z0-9]+)"
+          }
+        ]
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["cash deposit"]
+        },
+        "field": "merchant",
+        "value": "Cash Deposit"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["monthly interest"]
+        },
+        "field": "merchant",
+        "value": "Interest Credit"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "EUR credit card transaction",
+      "sender": "BM-IDFCBK-S",
+      "receivedAt": "2025-02-08T13:28:00.000Z",
+      "body": "Transaction Successful! EUR 500.00 spent on your IDFC FIRST Bank Credit Card ending XX1234 at AMAZON EU on 08-FEB-2025 at 01:28 PM Avbl Limit: INR 4074.10 If not done by you, call 180010888",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "AMAZON EU",
+          "accountLast4": "1234",
+          "transactionType": "EXPENSE",
+          "isFromCard": true,
+          "currency": "INR"
+        }
+      }
+    },
+    {
+      "name": "USD credit card transaction",
+      "sender": "BM-IDFCBK-S",
+      "receivedAt": "2025-03-15T10:00:00.000Z",
+      "body": "Transaction Successful! USD 99.99 spent on your IDFC FIRST Bank Credit Card ending XX5678 at NETFLIX on 15-MAR-2025 at 10:00 AM Avbl Limit: INR 25000.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "99.99",
+          "merchant": "NETFLIX",
+          "accountLast4": "5678",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "GBP credit card transaction",
+      "sender": "AX-IDFCBK-T",
+      "receivedAt": "2025-04-20T15:45:00.000Z",
+      "body": "Transaction Successful! GBP 150.00 spent on your IDFC FIRST Bank Credit Card ending XX9999 at LONDON SHOP on 20-APR-2025 at 03:45 PM Avbl Limit: INR 10000.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "150.00",
+          "merchant": "LONDON SHOP",
+          "accountLast4": "9999",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "INR account debit with balance",
+      "sender": "BM-IDFCBK-S",
+      "receivedAt": "2025-08-06T17:36:00.000Z",
+      "body": "Your A/C XXXXXXX1234 is debited by INR 68.00 on 06/08/25 17:36. New Bal :INR 5000.00",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "68.00",
+          "accountLast4": "1234",
+          "balance": "5000.00",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "INR account credit with balance",
+      "sender": "BM-IDFCBK-S",
+      "receivedAt": "2025-08-06T17:36:00.000Z",
+      "body": "Your A/C XXXXXXX5678 is credited by INR 500.00 on 06/08/25 17:36. New Bal :INR 10000.00",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "500.00",
+          "accountLast4": "5678",
+          "balance": "10000.00",
+          "transactionType": "INCOME",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "monthly interest credit",
+      "sender": "BM-IDFCBK-S",
+      "receivedAt": "2025-01-01T09:00:00.000Z",
+      "body": "Your A/C XXXXXXX1234 is credited by INR 125.50 on 01/01/25 for monthly interest. New Bal :INR 15125.50",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "125.50",
+          "merchant": "Interest Credit",
+          "accountLast4": "1234",
+          "balance": "15125.50",
+          "transactionType": "INCOME",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "BM-IDFCBK-S",
+      "receivedAt": "2025-05-01T12:00:00.000Z",
+      "body": "Your IDFC First Bank OTP is 123456. Do not share this code with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "promotional message is filter-rejected",
+      "sender": "BM-IDFCBK-S",
+      "receivedAt": "2025-05-02T12:00:00.000Z",
+      "body": "IDFC First Bank: Get 10% cashback offer on all online purchases!",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

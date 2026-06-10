@@ -1,0 +1,275 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro EquitasBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/EquitasBankParser.kt) plus the BankParser/BaseIndianBankParser fallbacks it delegates to via super.extractX(...). Primary format: \"INR <amt> debited from Equitas A/c XX1234 on DD-MM-YY to <merchant>. Avl Bal is INR <bal>\" (and the credited \"from <payer>\" mirror), UPI debits carrying \"-Ref:<id>\", and ATM withdrawals. No original Kotlin tests exist for this parser, so fixtures are synthesized from the parser's regexes."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.equitas.bank",
+    "type": "sms-parser",
+    "name": "Equitas Small Finance Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["EQUTAS", "EQUITAS", "EQUITASB"],
+      "dltPatterns": ["^.*EQUTAS.*$", "^.*EQUITA.*$", "^.*EQUITS.*$"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "one time password", "verification code", "offer", "discount"],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "transferred",
+        "received",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+(?:debited|credited)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "debited[\\s\\S]*?on\\s+\\d{2}-\\d{2}-\\d{2}\\s+to\\s+(?<value>[^.]+?)(?:\\.\\s*Avl|\\.\\s*Not|\\.Not|\\.$)"
+        },
+        {
+          "re": "credited[\\s\\S]*?on\\s+\\d{2}-\\d{2}-\\d{2}\\s+from\\s+(?<value>[^.]+?)(?:\\.\\s*Avl|\\.\\s*Not|\\.Not|\\.$)"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Avl\\s+Bal\\s+is\\s+INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "-?Ref[:\\s]*(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+[Xx*]*\\**(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+[Xx*]*\\**(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account).*?(?<value>\\d+)(?:\\s|$)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:Equitas\\s+)?A/c\\s+(?<value>[X\\d]+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "nsccl",
+        "clearing corporation",
+        "nach",
+        "ecs",
+        "groww",
+        "zerodha",
+        "upstox",
+        "kuvera",
+        "smallcase",
+        "mutual fund",
+        "sip",
+        "elss",
+        "ipo",
+        "folio",
+        "demat",
+        "nse",
+        "bse",
+        "cdsl",
+        "nsdl"
+      ],
+      "expense": ["spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["received", "refund", "cashback"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*",
+        "\\s+on\\s+\\d{2}.*",
+        "\\s+UPI.*",
+        "\\s+at\\s+\\d{2}:\\d{2}.*",
+        "\\s*-\\s*$",
+        "(\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(\\s+LTD\\.?|\\s+LIMITED)$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["via UPI"]
+        },
+        "field": "merchant",
+        "value": "UPI Transaction"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["debited"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credited"],
+          "notContainsAny": ["debited"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["withdrawn"],
+          "notContainsAny": ["debited", "credited"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["deposited"],
+          "notContainsAny": ["debited", "credited", "withdrawn"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "debit with merchant after dated 'to' and balance",
+      "sender": "AD-EQUTAS-S",
+      "receivedAt": "2026-05-12T10:15:00.000Z",
+      "body": "INR 500.00 debited from Equitas A/c XX1234 on 12-05-25 to AMAZON PAY. Avl Bal is INR 12,345.67. Call 18001031222 if this was not you -Equitas Small Finance Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "AMAZON PAY",
+          "accountLast4": "1234",
+          "balance": "12345.67",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "credit with payer after dated 'from'",
+      "sender": "VM-EQUITA-S",
+      "receivedAt": "2026-06-01T09:00:00.000Z",
+      "body": "INR 25,000.00 credited to Equitas A/c XX5678 on 01-06-25 from ACME CORP SALARY. Avl Bal is INR 40,000.00 -Equitas Small Finance Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25000.00",
+          "merchant": "ACME CORP SALARY",
+          "accountLast4": "5678",
+          "balance": "40000.00",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "upi debit with reference normalizes merchant to UPI Transaction",
+      "sender": "EQUITAS",
+      "receivedAt": "2026-06-15T18:30:00.000Z",
+      "body": "INR 149.00 debited from Equitas A/c XX1234 via UPI on 15-06-25-Ref:516723456789. Avl Bal is INR 5,000.00 -Equitas Small Finance Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "149.00",
+          "merchant": "UPI Transaction",
+          "accountLast4": "1234",
+          "balance": "5000.00",
+          "transactionType": "EXPENSE",
+          "reference": "516723456789"
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal classified expense via withdrawn keyword",
+      "sender": "JD-EQUTAS-T",
+      "receivedAt": "2026-06-10T12:00:00.000Z",
+      "body": "INR 2,000.00 withdrawn from Equitas A/c XX1234 at ATM on 10-06-25. Avl Bal is INR 3,000.00 -Equitas Small Finance Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2000.00",
+          "merchant": "Equitas A/c XX1234",
+          "accountLast4": "1234",
+          "balance": "3000.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "AD-EQUTAS-S",
+      "receivedAt": "2026-06-10T08:00:00.000Z",
+      "body": "123456 is your OTP for Equitas net banking login. Do not share it with anyone. -Equitas Small Finance Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

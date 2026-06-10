@@ -1,0 +1,233 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro MPESAParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/MPESAParser.kt). M-PESA (Safaricom Kenya) mobile-money wallet: every transaction message starts with a 10-char alphanumeric transaction ID followed by \"Confirmed\" (or \"Congratulations! <ID> confirmed\" for B2C payouts) and carries a \"New M-PESA balance is Ksh...\" trailer. Notes vs the Kotlin original: - Kotlin requires \"confirmed\" AND one of paid to/sent to/received/new m-pesa balance; the manifest filter only supports a single OR-list, so we require \"confirmed\" (the strict gate against promos) — messages with \"confirmed\" but no transaction keywords still fail amount/type extraction. - Kotlin checks income keywords before expense; the engine's typeRules priority is expense-before-income, so income is set via a pipeline setFieldWhen step to preserve the original order. - Paybill messages (\"...for account 123123\") inherit the Kotlin base-class account extraction (last 4 of the paybill account number); person-to-person and received messages have no account, so they fall back to \"0000\" like other wallet providers (see jiopay.ts rationale). - Kotlin's MPESAParser.cleanMerchantName deliberately keeps \"LIMITED\"/\"LTD\" in company names, so the cleaning rules here do NOT strip them."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "ke.mpesa.wallet",
+    "type": "sms-parser",
+    "name": "M-PESA",
+    "country": "KE",
+    "currency": "KES",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["MPESA", "M-PESA"],
+      "dltPatterns": ["M-?PESA"]
+    },
+    "filter": {
+      "requireAnyKeyword": ["confirmed"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Ksh(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+(?:paid|sent|received)"
+        },
+        {
+          "re": "received\\s+Ksh(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "paid to\\s+(?<value>.+?)\\s+\\d+\\.\\s+on"
+        },
+        {
+          "re": "sent to\\s+(?<value>.+?)\\s+0\\d{3}\\s+\\d{3}\\s+\\d{3}"
+        },
+        {
+          "re": "sent to\\s+(?<value>.+?)\\s+for account"
+        },
+        {
+          "re": "received\\s+(?:Ksh[0-9,]+(?:\\.[0-9]{2})?\\s+)?from\\s+(?<value>.+?)\\s+on"
+        },
+        {
+          "re": "from\\s+(?<value>[^.]+)\\.\\s+on"
+        }
+      ],
+      "balance": [
+        {
+          "re": "New M-PESA balance is Ksh(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "^(?<value>[A-Z0-9]{10})\\s+Confirmed"
+        },
+        {
+          "re": "Congratulations!\\s+(?<value>[A-Z0-9]{10})\\s+confirmed"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["paid to", "sent to"],
+      "income": ["you have received", "received ksh"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\.$",
+        "\\s+0\\d{10}$",
+        "\\s+\\d{6,}$",
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*",
+        "\\s+on\\s+\\d{2}.*",
+        "\\s+UPI.*",
+        "\\s+at\\s+\\d{2}:\\d{2}.*",
+        "\\s*-\\s*$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["you have received", "received ksh"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "accountLast4",
+        "value": "0000"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "payment to person (till)",
+      "sender": "MPESA",
+      "receivedAt": "2024-10-20T16:21:00.000Z",
+      "body": "TJK6H7T3GA Confirmed. Ksh70.00 paid to person 1. on 20/10/24 at 4:21 PM.New M-PESA balance is Ksh123.12. Transaction cost, Ksh0.00. Amount you can transact within the day is 499,895.00. Save frequent Tills for quick payment on M-PESA app https://bit.ly/mpesalnk",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "70.00",
+          "merchant": "person",
+          "transactionType": "EXPENSE",
+          "balance": "123.12",
+          "reference": "TJK6H7T3GA",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "paybill payment to equity",
+      "sender": "MPESA",
+      "receivedAt": "2025-10-20T16:26:00.000Z",
+      "body": "TJK6H7T0JT Confirmed. Ksh1000.00 sent to Equity Paybill Account for account 123123 on 20/10/25 at 4:26 PM New M-PESA balance is Ksh123.12. Transaction cost, Ksh23.00.Amount you can transact within the day is 499,795.00. Save frequent paybills for quick payment on M-PESA app https://bit.ly/mpesalnk",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1000.00",
+          "merchant": "Equity Paybill Account",
+          "transactionType": "EXPENSE",
+          "balance": "123.12",
+          "reference": "TJK6H7T0JT",
+          "accountLast4": "3123"
+        }
+      }
+    },
+    {
+      "name": "send to person with phone number",
+      "sender": "MPESA",
+      "receivedAt": "2024-10-20T18:27:00.000Z",
+      "body": "TJK6H7TDIJ Confirmed. Ksh50.00 sent to Person 2 0711 111 111 on 20/10/24 at 6:27 PM. New M-PESA balance is Ksh123.12. Transaction cost, Ksh0.00. Amount you can transact within the day is 499,745.00. Earn interest daily on Ziidi MMF,Dial *334#",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "50.00",
+          "merchant": "Person 2",
+          "transactionType": "EXPENSE",
+          "balance": "123.12",
+          "reference": "TJK6H7TDIJ",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "payment with comma in amount",
+      "sender": "MPESA",
+      "receivedAt": "2024-10-13T20:01:00.000Z",
+      "body": "TJD6H78J2L Confirmed. Ksh1,120.00 paid to Person 4 1. on 13/10/24 at 8:01 PM.New M-PESA balance is Ksh123.12. Transaction cost, Ksh0.00. Amount you can transact within the day is 498,440.00. Save frequent Tills for quick payment on M-PESA app https://bit.ly/mpesalnk",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1120.00",
+          "merchant": "Person 4",
+          "transactionType": "EXPENSE",
+          "balance": "123.12",
+          "reference": "TJD6H78J2L",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "received from person",
+      "sender": "MPESA",
+      "receivedAt": "2024-10-15T12:16:00.000Z",
+      "body": "TJF987E58C Confirmed.You have received Ksh300.00 from Person 3 0712121212 on 15/10/24 at 12:16 PM  New M-PESA balance is Ksh123.12. Earn interest daily on Ziidi MMF,Dial *334#",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "300.00",
+          "merchant": "Person 3",
+          "transactionType": "INCOME",
+          "balance": "123.12",
+          "reference": "TJF987E58C",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "received from bank (keeps LIMITED)",
+      "sender": "MPESA",
+      "receivedAt": "2024-10-14T19:16:00.000Z",
+      "body": "TJE6H7BG0S Confirmed.You have received Ksh3,000.00 from BANK OF BARODA KENYA LIMITED 123123 on 14/10/24 at 7:16 PM New M-PESA balance is Ksh123.12.  Separate personal and business funds through Pochi la Biashara on *334#.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "3000.00",
+          "merchant": "BANK OF BARODA KENYA LIMITED",
+          "transactionType": "INCOME",
+          "balance": "123.12",
+          "reference": "TJE6H7BG0S",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "received from B2C service (congratulations format)",
+      "sender": "MPESA",
+      "receivedAt": "2025-10-05T18:34:00.000Z",
+      "body": "Congratulations! TJ56H6J1WU confirmed.You have received Ksh425.00 from LOOP B2C. on 5/10/25 at 6:34 PM.New M-PESA balance is Ksh123.11. Separate personal and business funds through Pochi la Biashara on *334#.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "425.00",
+          "merchant": "LOOP B2C",
+          "transactionType": "INCOME",
+          "balance": "123.11",
+          "reference": "TJ56H6J1WU",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "promotional message without Confirmed is filter-rejected",
+      "sender": "MPESA",
+      "receivedAt": "2025-10-01T09:00:00.000Z",
+      "body": "Dear Customer, enjoy a Fuliza M-PESA limit of Ksh5,000. Dial *334# to opt in and pay bills even with a low balance. T&Cs apply.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

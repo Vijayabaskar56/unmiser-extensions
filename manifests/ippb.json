@@ -1,0 +1,229 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro IPPBParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/IPPBParser.kt). IPPB (India Post Payments Bank) sends from XX-IPBMSG-S/T DLT ids. Three observed formats: a UPI debit (\"debit Rs.X for UPI to vpa@handle Ref NNN\"), a UPI credit with an \"Info: UPI/CREDIT/<ref>\" trailer, and a \"received a payment ... from NAME thru IPPB\" credit narrative. The Kotlin parser's merchant extraction is conditional on debit/\"received a payment\" context, so it lives in pipeline extractFieldWhen steps rather than extract.merchant."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.ippb.bank",
+    "type": "sms-parser",
+    "name": "India Post Payments Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["IPBMSG"],
+      "dltPatterns": ["^[A-Z]{2}-IPBMSG-[ST]$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debit rs",
+        "received a payment",
+        "credit",
+        "debited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Avl\\s+Bal\\s+Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "Ref\\s+(?<value>\\d+)"
+        },
+        {
+          "re": "Info:\\s*UPI/[^/]+/(?<value>\\d+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "[Aa]/[Cc]\\s+X?(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "nsccl",
+        "clearing corporation",
+        "groww",
+        "zerodha",
+        "mutual fund",
+        "sip",
+        "demat"
+      ],
+      "expense": ["debit", "withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": [
+        "received a payment",
+        "info: upi/credit",
+        "credited",
+        "deposited",
+        "received",
+        "refund"
+      ]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s+PVT\\.?\\s+LTD\\.?$", "\\s+LTD\\.?$"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["debit", "for upi"]
+        },
+        "field": "merchant",
+        "value": "UPI Payment"
+      },
+      {
+        "kind": "extractFieldWhen",
+        "when": {
+          "containsAny": ["debit"]
+        },
+        "field": "merchant",
+        "extractors": [
+          {
+            "re": "\\bto\\s+(?<value>[^\\s@]+)"
+          }
+        ]
+      },
+      {
+        "kind": "extractFieldWhen",
+        "when": {
+          "containsAny": ["received a payment"]
+        },
+        "field": "merchant",
+        "extractors": [
+          {
+            "re": "from\\s+(?<value>.+?)\\s+thru"
+          }
+        ]
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "upi debit to vpa with ref and balance",
+      "sender": "AD-IPBMSG-S",
+      "receivedAt": "2026-06-09T11:20:00.000Z",
+      "body": "Your A/C X1234 has a debit Rs.250.00 for UPI to john@superyes Ref 560002638161. Avl Bal Rs.436.91 -IPPB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "250.00",
+          "merchant": "john",
+          "accountLast4": "1234",
+          "balance": "436.91",
+          "reference": "560002638161",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "upi debit without payee falls back to UPI Payment",
+      "sender": "CP-IPBMSG-T",
+      "receivedAt": "2026-06-05T09:05:00.000Z",
+      "body": "Your A/C X1234 has a debit Rs.99.00 for UPI Ref 560002638199. Avl Bal Rs.337.91 -IPPB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "99.00",
+          "merchant": "UPI Payment",
+          "accountLast4": "1234",
+          "balance": "337.91",
+          "reference": "560002638199",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "received a payment credit with payer name",
+      "sender": "JD-IPBMSG-S",
+      "receivedAt": "2026-05-28T16:42:00.000Z",
+      "body": "You have received a payment of Rs.500.00 from John Doe thru IPPB in your A/C X9876. Avl Bal Rs.936.91 -IPPB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "John Doe",
+          "accountLast4": "9876",
+          "balance": "936.91",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "upi credit with Info trailer (no merchant in body)",
+      "sender": "VM-IPBMSG-S",
+      "receivedAt": "2026-05-20T08:15:00.000Z",
+      "body": "A/C X5678 Credited for Rs.1.00 on 20-05-26. Info: UPI/CREDIT/523498793035. Avl Bal Rs.436.91 -IPPB",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "1.00",
+          "accountLast4": "5678",
+          "balance": "436.91",
+          "reference": "523498793035",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "AD-IPBMSG-S",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "123456 is the OTP for your IPPB transaction. Do not share it with anyone. -IPPB",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "collect request is filter-rejected",
+      "sender": "AD-IPBMSG-S",
+      "receivedAt": "2026-06-02T10:00:00.000Z",
+      "body": "merchant@upi has requested Rs.799.00 from your IPPB A/C X1234. Approve in the app. Ignore if already paid. -IPPB",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

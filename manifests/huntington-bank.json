@@ -1,0 +1,237 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro HuntingtonBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/HuntingtonBankParser.kt). Huntington (USA) sends \"Huntington Heads Up. We processed a/an <kind> withdrawal: $X at MERCHANT. Acct CKNNNN has a $Y bal (date time ET).\" for debit card, ATM, and ACH withdrawals — all expenses. Debit-card and ATM alerts are card transactions; ACH alerts are not."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "us.huntington.bank",
+    "type": "sms-parser",
+    "name": "Huntington Bank",
+    "country": "US",
+    "currency": "USD",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["Huntington Bank", "HUNTINGTON"],
+      "dltPatterns": ["^[A-Z]{2}-HUNTINGTON-[A-Z]$", ".*HUNTINGTON.*"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "withdrawal",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "withdrawal:\\s+\\$(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+at"
+        },
+        {
+          "re": "\\$(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "at\\s+(?<value>.+?)\\.\\s+Acct"
+        }
+      ],
+      "balance": [
+        {
+          "re": "has\\s+a\\s+\\$(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+bal"
+        },
+        {
+          "re": "has\\s+a\\s+(?<value>-\\$[0-9,]+(?:\\.\\d{2})?)\\s+bal"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "Acct\\s+CK(?<value>\\d{4})"
+        },
+        {
+          "re": "account\\s+ending\\s+(?<value>\\d{4})"
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": [
+        "withdrawal",
+        "debited",
+        "withdrawn",
+        "spent",
+        "charged",
+        "paid",
+        "purchase",
+        "deducted"
+      ],
+      "income": ["credited", "deposited", "received", "refund"]
+    },
+    "cardRules": {
+      "includeKeywords": ["debit card withdrawal", "atm withdrawal"],
+      "excludeKeywords": ["ach withdrawal"]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s+PVT\\.?\\s+LTD\\.?$", "\\s+LTD\\.?$"],
+      "minMerchantLength": 2
+    }
+  },
+  "fixtures": [
+    {
+      "name": "debit card withdrawal with positive balance",
+      "sender": "Huntington Bank",
+      "receivedAt": "2025-10-19T05:43:00.000Z",
+      "body": "Huntington Heads Up. We processed a debit card withdrawal: $25.00 at Bob Inc. Acct CK0000 has a $10.12 bal (10/19/25 5:43 AM ET).",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25.00",
+          "merchant": "Bob Inc",
+          "accountLast4": "0000",
+          "balance": "10.12",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "debit card withdrawal with negative balance",
+      "sender": "Huntington Bank",
+      "receivedAt": "2025-09-10T23:41:00.000Z",
+      "body": "Huntington Heads Up. We processed a debit card withdrawal: $20.00 at BC *UBER CASH. Acct CK0000 has a -$15.01 bal (9/10/25 11:41 PM ET).",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "20.00",
+          "merchant": "BC *UBER CASH",
+          "accountLast4": "0000",
+          "balance": "-$15.01",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal",
+      "sender": "Huntington Bank",
+      "receivedAt": "2025-09-03T12:12:00.000Z",
+      "body": "Huntington Heads Up. We processed an ATM withdrawal: $162.45 at POS John Inc. Acct CK0000 has a $20.20 bal (9/03/25 12:12 PM ET).",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "162.45",
+          "merchant": "POS John Inc",
+          "accountLast4": "0000",
+          "balance": "20.20",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "ach withdrawal with padded merchant",
+      "sender": "Huntington Bank",
+      "receivedAt": "2025-08-09T15:23:00.000Z",
+      "body": "Huntington Heads Up. We processed an ACH withdrawal: $50.67 at GEICO           . Acct CK0000 has a $6211.32 bal (8/09/25 3:23 PM ET).",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "50.67",
+          "merchant": "GEICO",
+          "accountLast4": "0000",
+          "balance": "6211.32",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "different account number with dotted merchant",
+      "sender": "HUNTINGTON",
+      "receivedAt": "2025-12-01T14:30:00.000Z",
+      "body": "Huntington Heads Up. We processed a debit card withdrawal: $100.50 at AMAZON.COM. Acct CK1234 has a $500.00 bal (12/01/25 2:30 PM ET).",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100.50",
+          "merchant": "AMAZON.COM",
+          "accountLast4": "1234",
+          "balance": "500.00",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "large amount with comma",
+      "sender": "Huntington Bank",
+      "receivedAt": "2025-11-15T10:00:00.000Z",
+      "body": "Huntington Heads Up. We processed a debit card withdrawal: $1,250.00 at BEST BUY. Acct CK5678 has a $3,500.75 bal (11/15/25 10:00 AM ET).",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1250.00",
+          "merchant": "BEST BUY",
+          "accountLast4": "5678",
+          "balance": "3500.75",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "ach withdrawal from utility company",
+      "sender": "HUNTINGTON",
+      "receivedAt": "2025-10-01T08:00:00.000Z",
+      "body": "Huntington Heads Up. We processed an ACH withdrawal: $125.00 at ELECTRIC COMPANY. Acct CK9999 has a $1000.00 bal (10/01/25 8:00 AM ET).",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "125.00",
+          "merchant": "ELECTRIC COMPANY",
+          "accountLast4": "9999",
+          "balance": "1000.00",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "heads up balance alert without withdrawal is filter-rejected",
+      "sender": "Huntington Bank",
+      "receivedAt": "2025-10-19T06:00:00.000Z",
+      "body": "Huntington Heads Up. Acct CK0000 has a $10.12 bal as of 10/19/25 5:43 AM ET.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

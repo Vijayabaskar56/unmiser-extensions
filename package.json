@@ -1,0 +1,20 @@
+{
+  "name": "unmiser-extensions",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Community store of Unmiser bank SMS parser plugins — JSON manifests with fixtures, validated against the real parser engine.",
+  "type": "module",
+  "scripts": {
+    "validate": "bun scripts/validate-all.ts",
+    "test": "bun scripts/validate-all.ts"
+  },
+  "dependencies": {
+    "decimal.js": "^10.6.0",
+    "js-md5": "^0.8.3",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "typescript": "^6"
+  }
+}

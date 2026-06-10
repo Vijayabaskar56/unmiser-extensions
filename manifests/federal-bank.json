@@ -1,0 +1,616 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro FederalBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/FederalBankParser.kt) plus the BankParser.kt base-class fallbacks it relies on. Covers UPI debits (\"Rs X debited via UPI ... to VPA ...\"), IMPS credits, \"you've received INR\" credits, e-mandate payments on Federal Bank cards, regular credit-card spends, Scapia Federal credit-card spends (₹ amounts), masked debit-card spends, and ATM withdrawals. Mandate-creation, payment-due, declined-mandate, failed-txn, and OTP messages are filter-rejected, as in the Kotlin isTransactionMessage / isMandateCreationNotification / isDeclinedMandatePayment logic."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.federal.bank",
+    "type": "sms-parser",
+    "name": "Federal Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["FEDBNK", "FEDERAL", "FEDFIB", "FEDSCP"],
+      "dltPatterns": ["^.*FEDBNK.*$", "^.*FEDERAL.*$", "^.*FEDFIB.*$", "^.*FEDSCP.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "ignore if already paid",
+        "successfully created",
+        "has been initiated",
+        "declined",
+        "will be processed",
+        "failed",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "is overdue"
+      ],
+      "requireAnyKeyword": [
+        "sent via upi",
+        "debited via upi",
+        "credit card was successful",
+        "spent on your credit card",
+        "payment of",
+        "payment via e-mandate",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+spent"
+        },
+        {
+          "re": "you've received INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+debited"
+        },
+        {
+          "re": "Rs\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+sent"
+        },
+        {
+          "re": "Rs\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+credited"
+        },
+        {
+          "re": "withdrawn\\s+Rs\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)\\s+on\\s+your"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)\\s+on\\s+\\d"
+        },
+        {
+          "re": "payment of\\s+INR\\s+[0-9,]+(?:\\.\\d{2})?\\s+for\\s+(?<value>.+?)\\s+on\\s+Federal\\s+Bank"
+        },
+        {
+          "re": "to\\s+VPA\\s+(?<value>[^\\s]+?)(?:\\.\\s*Ref\\s+No|\\s*Ref\\s+No|$)"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n@]+?)(?:\\.\\s*Ref|Ref\\s+No)"
+        },
+        {
+          "re": "It was sent by\\s+(?<value>[^.\\n]+?)(?:\\s+on|$)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\.\\s*|$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Bal:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "balance\\s+(?:is|of)\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "Ref\\s*No\\.?\\s*[:\\-]?\\s*(?<value>\\d{6,})"
+        },
+        {
+          "re": "\\bRef\\s+(?<value>\\d{6,})"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:credit|debit)\\s+card\\s+ending\\s+with\\s+(?<value>\\d{4})"
+        },
+        {
+          "re": "card\\s+XX\\*\\*?(?<value>\\d{4})"
+        },
+        {
+          "re": "(?:A/c|Account|Acct)\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:Debit|Credit)\\s+Card\\s+(?<value>\\d{4})"
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "Available\\s+limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "Avl\\s+Lmt:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ]
+    },
+    "typeRules": {
+      "credit": ["spent on your credit card", "credit card was successful"],
+      "expense": [
+        "sent via upi",
+        "debited",
+        "withdrawn",
+        "spent",
+        "paid",
+        "processed successfully"
+      ],
+      "income": ["credited", "received", "deposited", "refund"]
+    },
+    "cardRules": {
+      "includeKeywords": [
+        "credit card",
+        "debit card",
+        "card xx**",
+        "card xx",
+        "card ending with",
+        "card ending"
+      ],
+      "excludeKeywords": [
+        "via upi",
+        "to vpa",
+        "atm",
+        "via imps",
+        "via neft",
+        "via rtgs",
+        "a/c",
+        "account",
+        "saving account"
+      ]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s+(?:limited|ltd|pvt\\s+ltd|private\\s+limited)\\.?$", "\\s*[-–]\\s*$"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["credited to your a/c", "via imps"]
+        },
+        "field": "merchant",
+        "value": "IMPS Credit"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["sent by 0000"]
+        },
+        "field": "merchant",
+        "value": "Bank Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa"],
+          "containsAny": ["razorpay", "razorp", "rzp", "payu", "billdesk", "ccavenue"]
+        },
+        "field": "merchant",
+        "value": "Online Payment"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["vpa paytm"]
+        },
+        "field": "merchant",
+        "value": "Paytm"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["vpa phonepe"]
+        },
+        "field": "merchant",
+        "value": "PhonePe"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["vpa bharatpe"]
+        },
+        "field": "merchant",
+        "value": "BharatPe"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["vpa gpay", "vpa googlepay"]
+        },
+        "field": "merchant",
+        "value": "Google Pay"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa", "amazon"]
+        },
+        "field": "merchant",
+        "value": "Amazon"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa", "flipkart"]
+        },
+        "field": "merchant",
+        "value": "Flipkart"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa", "myntra"]
+        },
+        "field": "merchant",
+        "value": "Myntra"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa", "uber"]
+        },
+        "field": "merchant",
+        "value": "Uber"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa", "rapido"]
+        },
+        "field": "merchant",
+        "value": "Rapido"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa", "swiggy"]
+        },
+        "field": "merchant",
+        "value": "Swiggy"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa", "zomato"]
+        },
+        "field": "merchant",
+        "value": "Zomato"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa", "netflix"]
+        },
+        "field": "merchant",
+        "value": "Netflix"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa", "spotify"]
+        },
+        "field": "merchant",
+        "value": "Spotify"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa", "irctc"]
+        },
+        "field": "merchant",
+        "value": "IRCTC"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa", "redbus"]
+        },
+        "field": "merchant",
+        "value": "RedBus"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa", "makemytrip"]
+        },
+        "field": "merchant",
+        "value": "MakeMyTrip"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa", "airtel"]
+        },
+        "field": "merchant",
+        "value": "Airtel"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa", "indigo"]
+        },
+        "field": "merchant",
+        "value": "Indigo"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["to vpa", "spicejet"]
+        },
+        "field": "merchant",
+        "value": "SpiceJet"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["atm", "withdrawn"],
+          "notContainsAny": ["card"]
+        },
+        "field": "merchant",
+        "value": "ATM Withdrawal"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "upi debit to individual vpa",
+      "sender": "AD-FEDBNK",
+      "receivedAt": "2024-08-15T10:30:25.000Z",
+      "body": "Rs 150.00 debited via UPI on 15-08-2024 10:30:25 to VPA john.doe123@okbank.Ref No 987654321098.Small txns?Use UPI Lite!-Federal Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "150.00",
+          "merchant": "john.doe123@okbank",
+          "transactionType": "EXPENSE",
+          "reference": "987654321098",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "upi debit to merchant vpa mapped to brand",
+      "sender": "AD-FEDBNK",
+      "receivedAt": "2024-08-16T14:22:10.000Z",
+      "body": "Rs 450.75 debited via UPI on 16-08-2024 14:22:10 to VPA swiggy.food@paytm.Ref No 876543210987.Small txns?Use UPI Lite!-Federal Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "450.75",
+          "merchant": "Swiggy",
+          "transactionType": "EXPENSE",
+          "reference": "876543210987"
+        }
+      }
+    },
+    {
+      "name": "upi payment to indigo via paytm vpa",
+      "sender": "AD-FEDBNK",
+      "receivedAt": "2024-08-20T12:30:45.000Z",
+      "body": "Rs 3500.00 debited via UPI on 20-08-2024 12:30:45 to VPA indigo.paytm@hdfcbank.Ref No 987654321099.Small txns?Use UPI Lite!-Federal Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "3500.00",
+          "merchant": "Indigo",
+          "transactionType": "EXPENSE",
+          "reference": "987654321099"
+        }
+      }
+    },
+    {
+      "name": "imps credit to account",
+      "sender": "AD-FEDBNK",
+      "receivedAt": "2024-08-18T11:45:30.000Z",
+      "body": "Rs 3500.50 credited to your A/c XX4567 via IMPS on 18AUG2024 11:45:30 IMPS Ref no 654321098765 Bal:Rs 25000.75 -Federal Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "3500.50",
+          "merchant": "IMPS Credit",
+          "accountLast4": "4567",
+          "balance": "25000.75",
+          "transactionType": "INCOME",
+          "reference": "654321098765",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "you've received from individual",
+      "sender": "AD-FEDBNK",
+      "receivedAt": "2025-03-19T09:00:00.000Z",
+      "body": "John, you've received INR 10,509.09 in your Account XXXXXXXX1896. Woohoo! It was sent by TESTUSER on March 19, 2025. -Federal Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "10509.09",
+          "merchant": "TESTUSER",
+          "accountLast4": "1896",
+          "transactionType": "INCOME",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "you've received from masked 0000 sender becomes bank transfer",
+      "sender": "AD-FEDBNK",
+      "receivedAt": "2024-07-25T09:00:00.000Z",
+      "body": "John, you've received INR 17,179.95 in your Account XXXXXXXX1896. Woohoo! It was sent by 0000 on July 25, 2024. -Federal Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "17179.95",
+          "merchant": "Bank Transfer",
+          "accountLast4": "1896",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "successful e-mandate payment on debit card",
+      "sender": "AD-FEDBNK",
+      "receivedAt": "2025-05-05T08:00:00.000Z",
+      "body": "Hi, payment of INR 199.00 for Netflix via e-mandate ID: NX789XYZABC on Federal Bank Debit Card 3456 is processed successfully. To manage, visit: https://www.sihub.in/managesi/federal T&CA - Federal Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "199.00",
+          "merchant": "Netflix via e-mandate ID: NX789XYZABC",
+          "accountLast4": "3456",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "credit card spend with available limit",
+      "sender": "AD-FEDBNK",
+      "receivedAt": "2025-05-09T15:30:15.000Z",
+      "body": "INR 1200.00 spent on your credit card ending with 5678 at AMAZON on 09-05-2025 15:30:15. Available limit Rs.38000.00 -Federal Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1200.00",
+          "merchant": "AMAZON",
+          "accountLast4": "5678",
+          "creditLimit": "38000.00",
+          "transactionType": "CREDIT",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "scapia federal credit card spend with rupee symbol",
+      "sender": "VM-FEDSCP-S",
+      "receivedAt": "2025-04-01T20:15:00.000Z",
+      "body": "Hi! Your txn of ₹882.00 at Carnatic Cafe Gurgaon In on your Scapia Federal Visa credit card was successful. And you've earned 10% rewards on this spend! Not you? Go to Scapia support on the app or call 18002961199. -Federal Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "882.00",
+          "merchant": "Carnatic Cafe Gurgaon In",
+          "transactionType": "CREDIT",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "masked debit card spend with balance",
+      "sender": "AD-FEDBNK",
+      "receivedAt": "2025-05-14T15:30:45.000Z",
+      "body": "Rs 1500.00 debited via card XX**3456 at MERCHANT on 14-05-2025 15:30:45. Current Bal: Rs.250.75 -Federal Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1500.00",
+          "merchant": "MERCHANT",
+          "accountLast4": "3456",
+          "balance": "250.75",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal (synthesized from parser patterns)",
+      "sender": "JM-FEDBNK-S",
+      "receivedAt": "2024-09-12T17:45:10.000Z",
+      "body": "Rs 2000.00 withdrawn via ATM from A/c XX4567 on 12-09-2024 17:45:10. Bal:Rs 12000.50 -Federal Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2000.00",
+          "merchant": "ATM Withdrawal",
+          "accountLast4": "4567",
+          "balance": "12000.50",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "failed transaction is rejected",
+      "sender": "AD-FEDBNK",
+      "receivedAt": "2025-05-14T16:00:00.000Z",
+      "body": "Hi, txn of Rs. 1500.00 using card XX**3456 failed due to insufficient funds. Current Bal: Rs.250.75. Call 18004251199 if txn not initiated by you -Federal Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "declined e-mandate payment is rejected",
+      "sender": "AD-FEDBNK",
+      "receivedAt": "2025-05-05T08:05:00.000Z",
+      "body": "Hi, payment of INR 199.00 via e-mandate declined for ID: NX789XYZABC on Federal Bank Debit Card 3456. To manage, visit: https://www.sihub.in/managesi/federal T&CA - Federal Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "otp registration message is rejected",
+      "sender": "AD-FEDBNK",
+      "receivedAt": "2024-06-01T08:00:00.000Z",
+      "body": "Dear Customer, your FedMobile registration has been initiated. If not initiated by you, please call 18004201199. Please do not share your card details/OTP/CVV to anyone -Federal Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "mandate creation notification is rejected",
+      "sender": "AX-FEDBNK-S",
+      "receivedAt": "2024-09-05T08:00:00.000Z",
+      "body": "Dear Customer, You have successfully created a mandate on Netflix India for a MONTHLY frequency starting from 05-09-2024 for a maximum amount of Rs 199.00 Mandate Ref No- abc123def456@fifederal - Federal Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "payment due pre-debit notification is rejected",
+      "sender": "AX-FEDBNK-S",
+      "receivedAt": "2024-09-04T08:00:00.000Z",
+      "body": "Hi, payment due for Netflix,INR 199.00 on 05/09/2024 will be processed using Federal Bank Debit Card 3456. To cancel, visit https://www.sihub.in/managesi/federal T&CA - Federal Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "account kyc notification is rejected",
+      "sender": "AD-FEDBNK",
+      "receivedAt": "2024-09-01T08:00:00.000Z",
+      "body": "Hi, your Federal Bank Savings Account is currently debit frozen due to incomplete Video KYC. Please complete the VKYC by 30/09/2024 to avoid account closure.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

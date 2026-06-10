@@ -1,0 +1,109 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro HDFCMutualFundParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/HDFCMutualFundParser.kt, extends BaseIndianBankParser — INR). The original parser handles SIP purchase and redemption confirmations: - canHandle: sender.uppercase().contains(\"HDFCMF\") - isTransactionMessage: any of \"sip purchase\", \"has been processed\", \"folio\", \"nav\", \"redemption\" (positive checks only; no skip-list override) - amount: first `Rs\\.?\\s*([\\d,]+\\.?\\d*)` match (case-sensitive in Kotlin) - merchant (the fund scheme name): `under\\s+(.+?)\\s+for` (ignore case) - type: \"sip purchase\" / \"purchase\" -> INVESTMENT, \"redemption\" -> INCOME - balance and accountLast4 are always null (MF SMS carry a folio number, not a bank account), so no extractors and no fallback are defined here. No original test file exists for this parser; fixtures below are synthesized from the parser's regexes and doc comments."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.hdfcmf.bank",
+    "type": "sms-parser",
+    "name": "HDFC Mutual Fund",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["HDFCMF"],
+      "dltPatterns": ["^.*HDFCMF.*$"]
+    },
+    "filter": {
+      "requireAnyKeyword": ["sip purchase", "has been processed", "folio", "nav", "redemption"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Rs\\.?\\s*(?<value>[\\d,]+\\.?\\d*)",
+          "flags": ""
+        }
+      ],
+      "merchant": [
+        {
+          "re": "under\\s+(?<value>.+?)\\s+for"
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": ["purchase"],
+      "income": ["redemption"]
+    }
+  },
+  "fixtures": [
+    {
+      "name": "sip purchase processed with scheme and folio",
+      "sender": "VM-HDFCMF-S",
+      "receivedAt": "2026-06-05T09:30:00.000Z",
+      "body": "Dear Investor, your SIP Purchase of Rs. 5,000.00 under HDFC Flexi Cap Fund - Direct Growth for Folio 12345678/90 has been processed at NAV of Rs. 1543.2510. -HDFCMF",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "merchant": "HDFC Flexi Cap Fund - Direct Growth",
+          "transactionType": "INVESTMENT",
+          "currency": "INR"
+        }
+      }
+    },
+    {
+      "name": "lumpsum purchase confirmation",
+      "sender": "AD-HDFCMF",
+      "receivedAt": "2026-06-08T14:10:00.000Z",
+      "body": "Your purchase of Rs.10,000.00 under HDFC Top 100 Fund - Regular Plan for Folio 11223344/55 has been processed at NAV of Rs.95.4321 on 08-Jun-26.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "10000.00",
+          "merchant": "HDFC Top 100 Fund - Regular Plan",
+          "transactionType": "INVESTMENT"
+        }
+      }
+    },
+    {
+      "name": "redemption processed with scheme is income",
+      "sender": "HDFCMF",
+      "receivedAt": "2026-06-09T11:00:00.000Z",
+      "body": "Redemption of Rs. 25,000.00 under HDFC Liquid Fund - Direct Plan for Folio 98765432/11 has been processed. Proceeds will be sent to your registered bank.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25000.00",
+          "merchant": "HDFC Liquid Fund - Direct Plan",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "redemption without scheme phrase parses but needs review (null merchant in Kotlin)",
+      "sender": "VM-HDFCMF-S",
+      "receivedAt": "2026-06-09T16:45:00.000Z",
+      "body": "Redemption request of Rs. 12,345.67 in Folio 5566778/99 has been processed. Applicable NAV: Rs. 45.6789.",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "12345.67",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "VM-HDFCMF-S",
+      "receivedAt": "2026-06-09T18:00:00.000Z",
+      "body": "Your OTP for HDFC Mutual Fund online request is 482913. Do not share it with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,150 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro CredParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/CredParser.kt). CRED is a credit card bill-payment app; its confirmations represent transfers from the user's bank account to a credit card account, so the original parser hardcodes TransactionType.TRANSFER. The Kotlin isTransactionMessage requires BOTH \"payment of\" AND \"credited towards your\"; the manifest filter only supports any-of, so we gate on the more specific \"credited towards your\" phrase (every real CRED confirmation carries both)."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.cred.wallet",
+    "type": "sms-parser",
+    "name": "CRED",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["CRED", "CREDIN"],
+      "dltPatterns": ["^[A-Z]{2}-CREDIN-S$", "^[A-Z]{2}-CRED-[TPG]$", "^[A-Z]{2}-CRED-S$"]
+    },
+    "filter": {
+      "requireAnyKeyword": ["credited towards your"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "towards\\s+your\\s+(?<value>.+?\\s+Credit\\s+Card)"
+        }
+      ]
+    },
+    "pipeline": [
+      {
+        "kind": "fallbackField",
+        "field": "transactionType",
+        "value": "TRANSFER"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "merchant",
+        "value": "CRED"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "accountLast4",
+        "value": "0000"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "CRED payment to ICICI credit card",
+      "sender": "JK-CREDIN-S",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Payment of Rs.50000 has been successfully credited towards your ICICI Bank Credit Card. Your payment was settled in 3 seconds - CRED",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "50000",
+          "merchant": "ICICI Bank Credit Card",
+          "transactionType": "TRANSFER",
+          "accountLast4": "0000",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "CRED payment with decimal amount",
+      "sender": "AX-CREDIN-S",
+      "receivedAt": "2026-06-01T10:05:00.000Z",
+      "body": "Payment of Rs.1234.56 has been successfully credited towards your HDFC Credit Card. Your payment was settled in 3 seconds - CRED",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1234.56",
+          "merchant": "HDFC Credit Card",
+          "transactionType": "TRANSFER",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "CRED payment with comma-formatted amount",
+      "sender": "JK-CREDIN-S",
+      "receivedAt": "2026-06-01T10:10:00.000Z",
+      "body": "Payment of Rs.50,000 has been successfully credited towards your ICICI Bank Credit Card. Your payment was settled in 3 seconds - CRED",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "50000",
+          "merchant": "ICICI Bank Credit Card",
+          "transactionType": "TRANSFER",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "CRED sender CRED-S pattern",
+      "sender": "AD-CRED-S",
+      "receivedAt": "2026-06-01T10:15:00.000Z",
+      "body": "Payment of Rs.10000 has been successfully credited towards your SBI Credit Card.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "10000",
+          "merchant": "SBI Credit Card",
+          "transactionType": "TRANSFER",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "CRED sender CRED-T pattern",
+      "sender": "AX-CRED-T",
+      "receivedAt": "2026-06-01T10:20:00.000Z",
+      "body": "Payment of Rs.5000 has been successfully credited towards your HDFC Credit Card.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000",
+          "merchant": "HDFC Credit Card",
+          "transactionType": "TRANSFER",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "OTP message is filter-rejected",
+      "sender": "JK-CREDIN-S",
+      "receivedAt": "2026-06-01T10:25:00.000Z",
+      "body": "Your OTP for transaction is 123456. Do not share.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "failed CRED payment is filter-rejected",
+      "sender": "JK-CREDIN-S",
+      "receivedAt": "2026-06-01T10:30:00.000Z",
+      "body": "Payment of Rs.50000 could not be processed. Please try again later.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

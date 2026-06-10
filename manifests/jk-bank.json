@@ -1,0 +1,431 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro JKBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/JKBankParser.kt) plus the base BankParser.kt fallbacks (CompiledPatterns Amount/Reference/ Account/Balance). JK Bank (\"Jammu & Kashmir Bank\") messages are INR-first (\"Debited by INR 402393 at 10:43 by RTGS-...\"), with mTFR/eTFR mPay transfers, UPI credits, IMPS fund transfers, and TIN tax payments. Known deviations from the Kotlin parser (see fixtures): - Kotlin returns merchant = null for \"by CHRGS/...\" bank charges; the manifest engine cannot unset a field, so we map those to \"Bank Charges\". - Kotlin only skips RTGS/NEFT/IMPS confirmation SMS when they also contain \"has been credited\"; excludeKeywords cannot express AND, so we exclude on \"your rtgs/neft/imps txn\" alone (these confirmations are the only messages that use that phrasing)."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.jkbank.bank",
+    "type": "sms-parser",
+    "name": "JK Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["JKBANK", "JKB", "JKBANKL", "JKBNK"],
+      "dltPatterns": [
+        "^[A-Z]{2}-JKBANK.*$",
+        "^[A-Z]{2}-JKB.*$",
+        "^[A-Z]{2}-JKBNK.*$",
+        "^JKBANK-[A-Z]+$",
+        "^JKB-[A-Z]+$"
+      ]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "your rtgs txn",
+        "your neft txn",
+        "your imps txn"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "towards\\s+(?<value>[^.\\n]+?)(?:\\.\\s*Avl|\\.\\s*Available|\\.\\s*To\\s+dispute|$)"
+        },
+        {
+          "re": "mTFR/\\d+/(?<value>[^.\\n]+?)(?:\\.|A/C|$)"
+        },
+        {
+          "re": "(?:Debited|Credited)\\s+by\\s+INR\\s+[\\d,]+(?:\\.\\d{2})?\\s+at\\s+[\\d:]+\\s+by\\s+(?<value>[^.\\n]+?)(?:\\.|Available|$)"
+        },
+        {
+          "re": "via\\s+UPI\\s+from\\s+(?<value>[^.\\n]+?)\\s+on"
+        },
+        {
+          "re": "to\\s+(?<value>[^@\\s]+)@\\S+"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)\\s+via\\s+UPI"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Available\\s+Bal\\s+is\\s+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)\\s*(?:Cr|Dr)?"
+        },
+        {
+          "re": "A/C\\s+Bal\\s+is\\s+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)\\s*(?:Cr|Dr)?"
+        },
+        {
+          "re": "Avl\\s+Bal[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Balance[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Bal\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "RRN\\s+No\\.?\\s*(?<value>\\d+)"
+        },
+        {
+          "re": "UPI\\s+Ref[:\\s]+(?<value>\\d+)"
+        },
+        {
+          "re": "txn\\s+Ref[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "Reference[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "Ref\\s+No[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "Your\\s+A/c\\s+X+(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "JK\\s+Bank\\s+A/c\\s+no\\.\\s+X+(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "A/c\\s+X{3}(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "A/c\\s+X*(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "Account\\s+X+(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "A/c\\s+ending\\s+(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "clearing corpo",
+        "indian clearing",
+        "nse clearing",
+        "bse clearing",
+        "iccl",
+        "nsccl"
+      ],
+      "expense": [
+        "has been debited",
+        "debited",
+        "withdrawn",
+        "spent",
+        "charged",
+        "paid",
+        "purchase",
+        "transferred"
+      ],
+      "income": ["has been credited", "credited", "deposited", "received", "refund", "cashback"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*$",
+        "\\s+on\\s+\\d{2}.*$",
+        "\\s+UPI.*$",
+        "\\s+at\\s+\\d{2}:\\d{2}.*$",
+        "\\s*-\\s*$",
+        "(?:\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(?:\\s+LTD\\.?|\\s+LIMITED)$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["IMPS Fund transfer"]
+        },
+        "field": "merchant",
+        "value": "IMPS Transfer"
+      },
+      {
+        "kind": "extractFieldWhen",
+        "when": {
+          "containsAny": ["IMPS Fund transfer"]
+        },
+        "field": "merchant",
+        "extractors": [
+          {
+            "re": "Amt\\s+received\\s+from\\s+(?<value>[^h]+?)(?:\\s+having\\s+A/C|$)"
+          },
+          {
+            "re": "received\\s+from\\s+(?<value>[^.\\n]+?)(?:\\s+having|\\s+with|$)"
+          }
+        ]
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["TIN/Tax Informat"]
+        },
+        "field": "merchant",
+        "value": "Tax Information Network"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["ATM RECOVERY"]
+        },
+        "field": "merchant",
+        "value": "ATM Recovery Charge"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["by CHRGS"]
+        },
+        "field": "merchant",
+        "value": "Bank Charges"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["INDIAN CLEARING CORPO"]
+        },
+        "field": "merchant",
+        "value": "Indian Clearing Corporation"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["NSE CLEARING"]
+        },
+        "field": "merchant",
+        "value": "NSE Clearing"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["BSE CLEARING"]
+        },
+        "field": "merchant",
+        "value": "BSE Clearing"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["by RTGS-"],
+          "notContainsAny": ["clearing", "chrgs"]
+        },
+        "field": "merchant",
+        "value": "RTGS Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["by NEFT-"],
+          "notContainsAny": ["clearing", "chrgs"]
+        },
+        "field": "merchant",
+        "value": "NEFT Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["by eTFR"]
+        },
+        "field": "merchant",
+        "value": "Transfer"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "rtgs debit with reference and balance",
+      "sender": "JM-JKBANK-S",
+      "receivedAt": "2026-06-01T10:43:00.000Z",
+      "body": "Your A/c XXXXXXXX1111 has been Debited by INR 402393.00 at 10:43 by RTGS-JAKAH25085024027. Available Bal is INR 1525000.00 Cr. To dispute call 18001800234 -JK Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "402393.00",
+          "merchant": "RTGS Transfer",
+          "accountLast4": "1111",
+          "balance": "1525000.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "upi credit with sender name and upi ref",
+      "sender": "JKBANK",
+      "receivedAt": "2026-05-17T10:43:00.000Z",
+      "body": "Your A/c XXXXXXXX9651 has been credited with INR 2500.00 via UPI from RAMESH KUMAR on 17-Sep-24 at 10:43. UPI Ref: 425678912345. Available Bal is INR 56000.00 Cr -JK Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2500.00",
+          "merchant": "RAMESH KUMAR",
+          "accountLast4": "9651",
+          "balance": "56000.00",
+          "transactionType": "INCOME",
+          "reference": "425678912345"
+        }
+      }
+    },
+    {
+      "name": "mpay mtfr debit with recipient name",
+      "sender": "JD-JKBNK-S",
+      "receivedAt": "2026-04-22T12:30:00.000Z",
+      "body": "Your A/c XXXXXXXX1111 has been Debited by INR 5000.00 at 12:30 by mTFR/9622111111/JOHN DOE. Available Bal is INR 45000.00 Cr -JK Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "merchant": "JOHN DOE",
+          "accountLast4": "1111",
+          "balance": "45000.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "imps fund transfer credit with remitter and rrn",
+      "sender": "VM-JKBANK-S",
+      "receivedAt": "2026-03-10T09:12:00.000Z",
+      "body": "IMPS Fund transfer. Amt received from TRUEFILLINGS ADVISOR having A/C No. XXXXXXXX2233 has been credited to your JK Bank A/c no. XXXXXXXX9651 with INR 15000.00. RRN No.123456789012 -JK Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "15000.00",
+          "merchant": "TRUEFILLINGS ADVISOR",
+          "accountLast4": "9651",
+          "transactionType": "INCOME",
+          "reference": "123456789012"
+        }
+      }
+    },
+    {
+      "name": "tax payment towards tin (dlt-truncated)",
+      "sender": "AD-JKB-S",
+      "receivedAt": "2026-02-14T14:22:00.000Z",
+      "body": "Your A/c XXX8953 has been debited by INR 11800.00 at 14:22 towards TIN/Tax Informat. Available Bal is INR 25000.00 Cr -JK Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "11800.00",
+          "merchant": "Tax Information Network",
+          "accountLast4": "8953",
+          "balance": "25000.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "clearing corporation debit classified as investment",
+      "sender": "JM-JKBANK-S",
+      "receivedAt": "2026-01-08T09:15:00.000Z",
+      "body": "Your A/c XXXXXXXX1111 has been Debited by INR 25000.00 at 09:15 by RTGS-INDIAN CLEARING CORPO. Available Bal is INR 30000.00 Cr -JK Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25000.00",
+          "merchant": "Indian Clearing Corporation",
+          "accountLast4": "1111",
+          "balance": "30000.00",
+          "transactionType": "INVESTMENT"
+        }
+      }
+    },
+    {
+      "name": "bank charges debit (kotlin returns null merchant)",
+      "sender": "JM-JKBANK-S",
+      "receivedAt": "2026-01-20T11:05:00.000Z",
+      "body": "Your A/c XXXXXXXX1111 has been Debited by INR 590.00 at 11:05 by CHRGS/RTGS/BWY. Available Bal is INR 12000.00 Cr -JK Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "590.00",
+          "merchant": "Bank Charges",
+          "accountLast4": "1111",
+          "balance": "12000.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "JKBANK",
+      "receivedAt": "2026-05-01T08:00:00.000Z",
+      "body": "Your OTP for JK Bank net banking login is 482913. Do not share it with anyone. -JK Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "rtgs confirmation message is filter-rejected",
+      "sender": "JM-JKBANK-S",
+      "receivedAt": "2026-05-02T16:30:00.000Z",
+      "body": "Your RTGS Txn with UTR JAKAH25085024027 has been credited on 17-Sep-24 -JK Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

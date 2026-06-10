@@ -1,0 +1,508 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro FABParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/FABParser.kt). First Abu Dhabi Bank (UAE) — multi-line card-purchase SMS where the merchant is the line after the \"<CCY> <amount>\" line, plus single-line funds transfer / payment instruction / remittance / cheque narratives. Known deviations from the Kotlin parser (engine limitations, see fixtures): - currency is always the manifest currency \"AED\"; the Kotlin parser extracted the per-transaction currency (THB/USD) from the body. - merchant whitespace is collapsed to single spaces by the engine cleaner (\"TR DUBAI ARE\" -> \"TR DUBAI ARE\"). - transfer merchants are the static \"Transfer\" instead of the Kotlin composed \"Transfer: 003 -> 002\" / \"Transfer to 1xxx\" strings."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "ae.fab.bank",
+    "type": "sms-parser",
+    "name": "First Abu Dhabi Bank",
+    "country": "AE",
+    "currency": "AED",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["FAB"],
+      "dltPatterns": ["FABBANK", "ADFAB", "^[A-Z]{2}-FAB-[A-Z]$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "declined due to insufficient balance",
+        "transaction has been declined",
+        "address update request",
+        "statement request",
+        "stamped statement",
+        "cannot process your",
+        "amazing rate",
+        "request has been logged",
+        "reference number",
+        "beneficiary creation/modification request",
+        "funds transfer request is under process",
+        "has been resolved",
+        "funds transfer request has failed",
+        "card has been successfully activated",
+        "temporarily blocked",
+        "never share credit/debit card",
+        "replacement request",
+        "card will be ready for dispatch",
+        "otp",
+        "activation",
+        "atyourservice@bankfab.com",
+        "has been blocked on"
+      ],
+      "requireAnyKeyword": [
+        "credit card purchase",
+        "debit card purchase",
+        "inward remittance",
+        "outward remittance",
+        "atm cash withdrawal",
+        "payment instructions",
+        "has been processed",
+        "has been credited to your fab account",
+        "cash deposit",
+        "cheque credited",
+        "cheque returned",
+        "credit",
+        "debit",
+        "remittance",
+        "available balance"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "funds transfer request of\\s+([A-Z]{3})\\s+([0-9,]+(?:\\.\\d{2})?)",
+          "group": 2
+        },
+        {
+          "re": "for\\s+([A-Z]{3})\\s+([0-9,]+(?:\\.\\d{2})?)",
+          "group": 2
+        },
+        {
+          "re": "([A-Z]{3})\\s+\\*([0-9,]+(?:\\.\\d{2})?)",
+          "group": 2
+        },
+        {
+          "re": "([A-Z]{3})\\s+([0-9,]+(?:\\.\\d{2})?)",
+          "group": 2
+        },
+        {
+          "re": "Amount\\s*([A-Z]{3})\\s+\\*?([0-9,]+(?:\\.\\d{2})?)",
+          "group": 2
+        },
+        {
+          "re": "payment.*?([A-Z]{3})\\s+\\*?([0-9,]+(?:\\.\\d{2})?)",
+          "group": 2
+        }
+      ],
+      "merchant": [
+        {
+          "re": "(?:Credit|Debit)\\s+Card\\s+Purchase\\s+Card\\s+No\\s+[X\\d]+\\s+[A-Z]{3}\\s+[\\d,.]+\\s+([^0-9]+?)(?:\\s+\\d{2}/\\d{2}/\\d{2})"
+        },
+        {
+          "re": "[A-Z]{3}\\s+[0-9,]+(?:\\.\\d{2})?[ \\t]*\\n(?<value>[^/\\n]+?)[ \\t]*(?:\\n|$)"
+        },
+        {
+          "re": "([A-Z]+\\.(?:COM|NET|ORG|IN)[^\\n]*)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "available\\s+balance\\s+(?:is\\s+)?([A-Z]{3})\\s*\\*{0,}([0-9,]+(?:\\.\\d{2})?)",
+          "group": 2
+        }
+      ],
+      "reference": [
+        {
+          "re": "(\\d{2}/\\d{2}/\\d{2}\\s+\\d{2}:\\d{2})"
+        },
+        {
+          "re": "Value\\s+Date\\s+(\\d{2}/\\d{2}/\\d{4})"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "from\\s+account\\s+([X\\d]{4,})",
+          "takeLast4": true
+        },
+        {
+          "re": "from\\s+(?:your\\s+)?account/card\\s+([X\\d]{4,})",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+No\\s+([X\\d]{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "Account\\s+([X\\d]{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "Account\\s+[X*]+(\\d{4})",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "credit": ["credit card purchase"],
+      "expense": [
+        "debit card purchase",
+        "cheque returned",
+        "atm cash withdrawal",
+        "outward remittance",
+        "payment instructions",
+        "has been processed",
+        "debit",
+        "purchase",
+        "payment"
+      ],
+      "income": [
+        "cheque credited",
+        "inward remittance",
+        "cash deposit",
+        "has been credited to your fab account",
+        "credit"
+      ],
+      "transfer": ["funds transfer request"]
+    },
+    "cardRules": {
+      "includeKeywords": ["credit card purchase", "debit card purchase"],
+      "excludeKeywords": []
+    },
+    "cleaning": {
+      "stripPatterns": ["\\*"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["funds transfer request"]
+        },
+        "field": "transactionType",
+        "value": "TRANSFER"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["funds transfer request"]
+        },
+        "field": "merchant",
+        "value": "Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["payment instructions"]
+        },
+        "field": "merchant",
+        "value": "Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["has been credited to your fab account"],
+          "notContainsAny": ["unsuccessful transaction"]
+        },
+        "field": "merchant",
+        "value": "Account Credited"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["cash withdrawal"]
+        },
+        "field": "merchant",
+        "value": "Cash Withdrawal"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["atm cash withdrawal"]
+        },
+        "field": "merchant",
+        "value": "ATM Withdrawal"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["inward remittance"]
+        },
+        "field": "merchant",
+        "value": "Inward Remittance"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["outward remittance"]
+        },
+        "field": "merchant",
+        "value": "Outward Remittance"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["cash deposit"]
+        },
+        "field": "merchant",
+        "value": "Cash Deposit"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["cheque credited"]
+        },
+        "field": "merchant",
+        "value": "Cheque Credited"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["cheque returned"]
+        },
+        "field": "merchant",
+        "value": "Cheque Returned"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["unsuccessful transaction"]
+        },
+        "field": "merchant",
+        "value": "Refund"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "credit card purchase multi-line",
+      "sender": "FAB",
+      "receivedAt": "2025-09-23T16:17:00.000Z",
+      "body": "Credit Card Purchase\nDebit\nAccount XXXX0002\nCard XXXX1234\nAED 8.00\nTR              DUBAI           ARE\n23/09/25 16:17\nAvailable Balance AED 4530.16",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "8.00",
+          "transactionType": "CREDIT",
+          "merchant": "TR DUBAI ARE",
+          "accountLast4": "0002",
+          "balance": "4530.16",
+          "reference": "23/09/25 16:17",
+          "isFromCard": true,
+          "currency": "AED"
+        }
+      }
+    },
+    {
+      "name": "inward remittance",
+      "sender": "FAB",
+      "receivedAt": "2025-09-18T10:00:00.000Z",
+      "body": "Inward Remittance\nCredit\nAccount XXXX5678\nAED 444.00\nValue Date 18/09/2025\nAvailable Balance AED 5444.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "444.00",
+          "transactionType": "INCOME",
+          "merchant": "Inward Remittance",
+          "accountLast4": "5678",
+          "balance": "5444.00",
+          "reference": "18/09/2025"
+        }
+      }
+    },
+    {
+      "name": "payment instructions processed",
+      "sender": "FAB",
+      "receivedAt": "2025-09-10T15:28:00.000Z",
+      "body": "Dear Customer, Your payment instructions of AED 250.00 to 5xxx**1xxx has been processed on 10/09/2025 15:28",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "250.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Transfer"
+        }
+      }
+    },
+    {
+      "name": "debit card purchase THB",
+      "sender": "FAB",
+      "receivedAt": "2025-07-26T17:55:00.000Z",
+      "body": "Debit Card Purchase\nDebit\nAccount XXXX9876\nCard XXXX2865\nTHB 1500.50\nWWW.GRAB.COM          BANGKOK         TH\n26/07/25 17:55\nAvailable Balance AED 8500.25",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1500.50",
+          "transactionType": "EXPENSE",
+          "merchant": "WWW.GRAB.COM BANGKOK TH",
+          "accountLast4": "9876",
+          "balance": "8500.25",
+          "reference": "26/07/25 17:55",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "atm cash withdrawal THB",
+      "sender": "FAB",
+      "receivedAt": "2025-06-18T13:06:00.000Z",
+      "body": "ATM Cash withdrawal\nDebit\nAccount XXXX4321\nCard XXXX8765\nTHB 5000.00\n18/06/25 13:06\nAvailable Balance AED 15000.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "transactionType": "EXPENSE",
+          "merchant": "ATM Withdrawal",
+          "accountLast4": "4321",
+          "balance": "15000.00",
+          "reference": "18/06/25 13:06",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "outward remittance",
+      "sender": "FAB",
+      "receivedAt": "2024-07-10T09:00:00.000Z",
+      "body": "Outward Remittance\nDebit\nAccount XXXX0002\nAED 150.00\nValue Date 10/07/24\nAvailable Balance AED 6337.92",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "150.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Outward Remittance",
+          "accountLast4": "0002",
+          "balance": "6337.92"
+        }
+      }
+    },
+    {
+      "name": "debit card purchase USD",
+      "sender": "FAB",
+      "receivedAt": "2024-07-10T20:07:00.000Z",
+      "body": "Debit Card Purchase\nDebit\nAccount XXXX0002\nCard XXXX9879\nUSD 20.00\nCLAUDE.AI SUBSCRIPTION+14152360599 CA US\n10/07/24 20:07\nAvailable Balance AED 5978.78",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "20.00",
+          "transactionType": "EXPENSE",
+          "merchant": "CLAUDE.AI SUBSCRIPTION+14152360599 CA US",
+          "accountLast4": "0002",
+          "balance": "5978.78",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "cash deposit",
+      "sender": "FAB",
+      "receivedAt": "2025-06-20T12:00:00.000Z",
+      "body": "Cash Deposit\nCredit\nAccount XXXX4321\nAED 10000.00\nDate 20/06/25",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "10000.00",
+          "transactionType": "INCOME",
+          "merchant": "Cash Deposit",
+          "accountLast4": "4321"
+        }
+      }
+    },
+    {
+      "name": "cheque credited",
+      "sender": "FAB",
+      "receivedAt": "2024-10-01T08:00:00.000Z",
+      "body": "Cheque Credited\nCheque No 000020 for AED 9999.00 deposited in your account XXXX0002 has been credited on 01/10/2024 \nYour available balance is AED 7777.62.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "9999.00",
+          "transactionType": "INCOME",
+          "merchant": "Cheque Credited",
+          "accountLast4": "0002",
+          "balance": "7777.62"
+        }
+      }
+    },
+    {
+      "name": "cheque returned",
+      "sender": "FAB",
+      "receivedAt": "2024-10-02T08:00:00.000Z",
+      "body": "Cheque Returned\nCheque No 000020 for AED 8888.00 deposited in your account XXXX0002  has been returned unpaid.\nPlease contact the branch.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "8888.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Cheque Returned",
+          "accountLast4": "0002"
+        }
+      }
+    },
+    {
+      "name": "unsuccessful transaction refund",
+      "sender": "FAB",
+      "receivedAt": "2025-06-19T02:50:00.000Z",
+      "body": "Dear customer, unsuccessful transaction of AED 42.13 has been credited to your account XXXX0002 Card XXXX2865 on 19/06/25 02:50 and your current available balance is AED 4444.13",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "42.13",
+          "transactionType": "INCOME",
+          "merchant": "Refund",
+          "accountLast4": "0002",
+          "balance": "4444.13",
+          "reference": "19/06/25 02:50",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "funds transfer to IBAN with comma amount",
+      "sender": "FAB",
+      "receivedAt": "2025-06-12T16:43:00.000Z",
+      "body": "Dear Customer, your funds transfer request of  AED 3,555.00 to IBAN/Account/Card XXXX0001  has been processed successfully from your account/card XXXX0002 on 12/06/2025 16:43",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "3555.00",
+          "transactionType": "TRANSFER",
+          "merchant": "Transfer",
+          "accountLast4": "0002"
+        }
+      }
+    },
+    {
+      "name": "generic account credit",
+      "sender": "FAB",
+      "receivedAt": "2025-06-08T09:00:00.000Z",
+      "body": "An amount of AED 555.00 has been credited to your FAB account XXXX0002 on 08/06/25 .Your Available Balance is AED 5555.43",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "555.00",
+          "transactionType": "INCOME",
+          "merchant": "Account Credited",
+          "accountLast4": "0002",
+          "balance": "5555.43"
+        }
+      }
+    },
+    {
+      "name": "funds transfer between own accounts",
+      "sender": "FAB",
+      "receivedAt": "2025-02-24T00:31:00.000Z",
+      "body": "Dear Customer, your funds transfer request of AED 130.00 from account XXXX0003 to account XXXX0002 has been processed on 24/02/2025 00:31. For more information please call 600525500 (+97126811511 if calling from overseas).",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "130.00",
+          "transactionType": "TRANSFER",
+          "merchant": "Transfer",
+          "accountLast4": "0003"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "FAB",
+      "receivedAt": "2025-06-01T08:00:00.000Z",
+      "body": "Your OTP for FAB Mobile Banking is 123456. Do not disclose your OTP to anyone. FAB staff will never ask for it.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

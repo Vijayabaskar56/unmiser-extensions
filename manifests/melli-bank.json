@@ -1,0 +1,205 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro MelliBankParser.kt + BaseIranianBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/). Bank Melli Iran SMS are Persian: \"مبلغ <amount> ریال\" amount lines, \"مانده:\" balance, Persian type keywords (برداشت/پرداخت/خرید/انتقال/مصرف -> EXPENSE, واریز -> INCOME). The Kotlin base enforces a minimum amount of 1000 IRR, approximated here by requiring either comma-grouped thousands or a plain 4+ digit run."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "ir.melli.bank",
+    "type": "sms-parser",
+    "name": "Melli Bank",
+    "country": "IR",
+    "currency": "IRR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["+98700717", "MELLI", "MELLIBANK", "MELLI BANK", "BANK MELLI", "BANKMELLI"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "رمز یکبار مصرف",
+        "کد تایید",
+        "تبلیغ",
+        "پیشنهاد",
+        "تخفیف",
+        "cashback offer"
+      ],
+      "requireAnyKeyword": [
+        "مبلغ",
+        "ریال",
+        "تومان",
+        "irr",
+        "toman",
+        "برداشت",
+        "واریز",
+        "پرداخت",
+        "خرید",
+        "انتقال",
+        "debit",
+        "credit",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "مبلغ\\s*(?<value>\\d{1,3}(?:,\\d{3})+|\\d{4,})\\s*(?:ریال|تومان)"
+        },
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})+|\\d{4,})\\s*(?:ریال|تومان)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "(?<value>\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4})"
+        }
+      ],
+      "balance": [
+        {
+          "re": "مانده\\s*:?\\s*(?<value>\\d{1,3}(?:,\\d{3})*)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account).*?(?<value>\\d+)(?:\\s|$)",
+          "takeLast4": true
+        },
+        {
+          "re": "\\d{4}[-\\s]?(?<value>\\d{4})"
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "clearing corporation",
+        "groww",
+        "zerodha",
+        "upstox",
+        "mutual fund",
+        "sip"
+      ],
+      "expense": ["برداشت", "پرداخت", "خرید", "انتقال", "مصرف"],
+      "income": ["واریز", "credited"]
+    },
+    "cardRules": {
+      "includeKeywords": ["کارت", "card", "کارت بدهی", "کارت اعتباری"],
+      "excludeKeywords": []
+    },
+    "pipeline": [
+      {
+        "kind": "rejectWhen",
+        "when": {
+          "containsAll": ["درخواست", "پرداخت"]
+        },
+        "reason": "FILTER_REJECTED"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "deposit transaction",
+      "sender": "+98700717",
+      "receivedAt": "2026-06-01T09:00:00.000Z",
+      "body": "مبلغ 1,500,000 ریال واریز به حساب شما انجام شد. مانده: 2,500,000 ریال",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "1500000",
+          "balance": "2500000",
+          "transactionType": "INCOME",
+          "currency": "IRR",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "withdrawal transaction",
+      "sender": "+98700717",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "مبلغ 750,000 ریال از حساب شما برداشت شد. مانده: 1,750,000 ریال",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "750000",
+          "balance": "1750000",
+          "transactionType": "EXPENSE",
+          "currency": "IRR",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "card purchase transaction",
+      "sender": "MELLI",
+      "receivedAt": "2026-06-01T11:00:00.000Z",
+      "body": "مبلغ 250,000 ریال خرید با کارت شما انجام شد. مانده: 1,500,000 ریال",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "250000",
+          "balance": "1500000",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "transfer classified as EXPENSE",
+      "sender": "MELLIBANK",
+      "receivedAt": "2026-06-01T12:00:00.000Z",
+      "body": "مبلغ 1,000,000 ریال انتقال یافت. مانده: 500,000 ریال",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "1000000",
+          "balance": "500000",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "card purchase with card number",
+      "sender": "BANK MELLI",
+      "receivedAt": "2026-06-02T08:30:00.000Z",
+      "body": "خرید مبلغ 250,000 ریال با کارت 6037-9911-2233-4455 انجام شد. مانده: 1,200,000 ریال",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "250000",
+          "balance": "1200000",
+          "merchant": "6037-9911-2233-4455",
+          "accountLast4": "9911",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "confirmation code message is filter-rejected",
+      "sender": "MELLI",
+      "receivedAt": "2026-06-02T09:00:00.000Z",
+      "body": "بانک ملی: کد تایید شما 123456 می باشد. این کد را در اختیار دیگران قرار ندهید.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

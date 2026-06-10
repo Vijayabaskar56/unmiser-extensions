@@ -1,0 +1,326 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro BandhanBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/BandhanBankParser.kt) plus the BankParser.kt base-class fallbacks it relies on (amount, account last-4, reference, transaction type, merchant cleanup). Formats covered: - \"INR 180.00 debited from A/c XXXXXXXXXX1234 towards UPI/DR/<ref>/<name> Value 16-NOV-2025 . Clear Bal is INR 9999.99. Bandhan Bank\" - \"INR 25,000.00 deposited to A/c XXXXXXXXXX1234 towards UPI/CR/<ref>/<name>/u on 03-OCT-2025 . Clear Bal is INR 30,123.00 .\" - \"Dear Customer, your account XXXXXXXXXX1234 is credited with INR 3.00 on 01-OCT-2025 towards interest. Bandhan Bank\""
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.bandhan.bank",
+    "type": "sms-parser",
+    "name": "Bandhan Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["BANDHAN"],
+      "dltPatterns": ["BANDHAN", "^[A-Z]{2}-BDNSMS(?:-S)?$", "^[A-Z]{2}-BANDHN(?:-S)?$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "towards\\s+UPI\\/[A-Z]{2}\\/[A-Z0-9]+\\/(?<value>[^\\/\\n]+?)(?:\\/u)?(?:\\s+Value|\\s+on|\\s+dt|\\s+at|\\.|$)"
+        },
+        {
+          "re": "towards\\s+(?<value>[^.\\/\\n]+?)(?:\\s+Value|\\s+on|\\s+dt|\\s+at|\\.|$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Clear\\s+Bal\\s+(?:is\\s+)?(?:INR\\s*)?(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "UPI\\/[A-Z]{2}\\/(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        },
+        {
+          "re": "Reference\\s+Number[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A\\/c|Account|Acct)(?:\\s+No)?\\.?\\s+[Xx\\*]*(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+[Xx\\*]*(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A\\/c|Account).*?(?<value>\\d+)(?:\\s|$)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "indian clearing corporation",
+        "nsccl",
+        "nse clearing",
+        "clearing corporation",
+        "nach",
+        "groww",
+        "zerodha",
+        "upstox",
+        "kuvera",
+        "paytm money",
+        "etmoney",
+        "smallcase",
+        "angel one",
+        "angel broking",
+        "5paisa",
+        "icici securities",
+        "hdfc securities",
+        "kotak securities",
+        "motilal oswal",
+        "sharekhan",
+        "axis direct",
+        "sbi securities",
+        "mutual fund",
+        "sip",
+        "elss",
+        "folio",
+        "demat",
+        "stockbroker",
+        "digital gold",
+        "sovereign gold",
+        "cdsl",
+        "nsdl"
+      ],
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["credited", "deposited", "received", "refund", "cashback"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*",
+        "\\s+on\\s+\\d{2}.*",
+        "\\s+UPI.*",
+        "\\s+at\\s+\\d{2}:\\d{2}.*",
+        "\\s*-\\s*$",
+        "(\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(\\s+LTD\\.?|\\s+LIMITED)$",
+        "\\bu\\b"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["towards interest"]
+        },
+        "field": "merchant",
+        "value": "Interest"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "upi debit to Amazon Pay (user issue)",
+      "sender": "XY-BDNSMS-S",
+      "receivedAt": "2025-11-16T10:00:00.000Z",
+      "body": "INR 180.00 debited from A/c XXXXXXXXXX1234 towards UPI/DR/D123013240123/Amazon Pa Value 16-NOV-2025 . Clear Bal is INR 9999.99. Bandhan Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "180.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Amazon Pa",
+          "reference": "D123013240123",
+          "accountLast4": "1234",
+          "balance": "9999.99",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "upi debit to person (user issue)",
+      "sender": "XY-BDNSMS-S",
+      "receivedAt": "2025-11-10T10:00:00.000Z",
+      "body": "INR 5.00 debited from A/c XXXXXXXXXX1234 towards UPI/DR/D123290818021/Tanuska E Value 10-NOV-2025 . Clear Bal is INR 9999.76. Bandhan Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Tanuska E",
+          "reference": "D123290818021",
+          "accountLast4": "1234",
+          "balance": "9999.76",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "upi debit to Amazon In (user issue)",
+      "sender": "XY-BDNSMS-S",
+      "receivedAt": "2025-10-10T10:00:00.000Z",
+      "body": "INR 92.00 debited from A/c XXXXXXXXXX1234 towards UPI/DR/D512361791780/Amazon In Value 10-OCT-2025 . Clear Bal is INR 9999.70. Bandhan Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "92.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Amazon In",
+          "reference": "D512361791780",
+          "accountLast4": "1234",
+          "balance": "9999.70",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "interest credit",
+      "sender": "XY-BDNSMS-S",
+      "receivedAt": "2025-10-01T08:00:00.000Z",
+      "body": "Dear Customer, your account XXXXXXXXXX1234 is credited with INR 3.00 on 01-OCT-2025 towards interest. Bandhan Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "3.00",
+          "transactionType": "INCOME",
+          "merchant": "Interest",
+          "accountLast4": "1234",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "upi credit with trailing /u flag and balance",
+      "sender": "XY-BDNSMS-S",
+      "receivedAt": "2025-10-03T09:30:00.000Z",
+      "body": "INR 25,000.00 deposited to A/c XXXXXXXXXX1234 towards UPI/CR/C224513287910/JOHN DOE/u on 03-OCT-2025 . Clear Bal is INR 30,123.00 . Bandhan Bank.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25000.00",
+          "transactionType": "INCOME",
+          "merchant": "JOHN DOE",
+          "reference": "C224513287910",
+          "accountLast4": "1234",
+          "balance": "30123.00",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "large amount debit",
+      "sender": "AD-BDNSMS-S",
+      "receivedAt": "2025-11-18T12:00:00.000Z",
+      "body": "INR 50,000.00 debited from A/c XXXXXXXXXX5678 towards UPI/DR/D999888777666/Big Purchase Value 18-NOV-2025 . Clear Bal is INR 100,000.50. Bandhan Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "50000.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Big Purchase",
+          "reference": "D999888777666",
+          "accountLast4": "5678",
+          "balance": "100000.50",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "transaction with plain BANDHAN sender",
+      "sender": "BANDHAN",
+      "receivedAt": "2025-11-20T12:00:00.000Z",
+      "body": "INR 1000.00 debited from A/c XXXXXXXXXX9876 towards UPI/DR/D111222333444/Store XYZ Value 20-NOV-2025 . Clear Bal is INR 15000.00. Bandhan Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1000.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Store XYZ",
+          "reference": "D111222333444",
+          "accountLast4": "9876",
+          "balance": "15000.00",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "otp message rejected",
+      "sender": "XY-BDNSMS-S",
+      "receivedAt": "2025-11-01T12:00:00.000Z",
+      "body": "Your Bandhan Bank OTP is 123456. Do not share with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "promotional message rejected",
+      "sender": "XY-BDNSMS-S",
+      "receivedAt": "2025-11-01T12:00:00.000Z",
+      "body": "Bandhan Bank offers 7% interest on fixed deposits. Visit branch today!",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

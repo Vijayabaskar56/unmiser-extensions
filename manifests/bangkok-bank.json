@@ -1,0 +1,239 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro BangkokBankParser.kt + BaseThailandBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/). The Bangkok Bank parser itself only defines canHandle/getBankName — all extraction and classification behavior comes from BaseThailandBankParser (THB amounts in Thai/English, \"Bal/คงเหลือ\" balances, \"A/C|บช xNNNN\" accounts, \"at|ร้าน\" merchants, Thai+English type keywords) plus the BankParser base fallbacks (CompiledPatterns Account/Reference). Fixture bodies for the first three cases are verbatim from ThailandBankParsersTest.kt."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "th.bbl.bank",
+    "type": "sms-parser",
+    "name": "Bangkok Bank",
+    "country": "TH",
+    "currency": "THB",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["BBL"],
+      "dltPatterns": ["^.*BANGKOK\\s?BANK.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "รหัส",
+        "ยืนยัน",
+        "สมัคร",
+        "โปรโมชั่น",
+        "promotion",
+        "cashback offer"
+      ],
+      "requireAnyKeyword": [
+        "เงินเข้า",
+        "เงินออก",
+        "ถอนเงิน",
+        "โอนเงิน",
+        "ใช้จ่าย",
+        "เงินฝาก",
+        "รับเงิน",
+        "คงเหลือ",
+        "บาท",
+        "ยอดใช้จ่าย",
+        "withdrawal",
+        "deposit",
+        "transfer",
+        "payment",
+        "spent",
+        "receive",
+        "bal",
+        "thb",
+        "card transaction",
+        "card payment",
+        "credit card spending",
+        "available limit"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:THB|฿)\\s*(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*USD"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "(?:at|ร้าน)\\s+(?<value>[A-Za-z0-9\\s&._-]+?)(?:\\s+(?:A/C|บช|Bal|คงเหลือ|Available|on|$))"
+        },
+        {
+          "re": "at\\s+(?<value>[A-Za-z0-9\\s&._-]+)$"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]+)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]+)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/C|บช)\\s*x(?<value>\\d{4})"
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "(?:Available limit|วงเงินคงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": ["clearing corporation", "mutual fund", "sip purchase"],
+      "credit": ["credit card spending", "ยอดใช้จ่ายต่างประเทศ", "ยอดใช้จ่าย"],
+      "expense": [
+        "เงินออก",
+        "ถอนเงิน",
+        "ถอนเงินสด",
+        "โอนเงินออก",
+        "โอนเงินผ่าน",
+        "ใช้จ่ายบัตร",
+        "ใช้จ่าย",
+        "withdrawal",
+        "payment",
+        "you spent",
+        "transfer out",
+        "card payment",
+        "card transaction",
+        "atm withdrawal"
+      ],
+      "income": [
+        "เงินเข้า",
+        "เงินฝาก",
+        "รับเงิน",
+        "โอนเงินเข้า",
+        "รับเงินพร้อมเพย์",
+        "รับเงินโอน",
+        "เงินฝากเข้า",
+        "deposit",
+        "receive",
+        "transfer in",
+        "transfer received"
+      ]
+    },
+    "cleaning": {
+      "minMerchantLength": 2,
+      "commonWords": ["ผ่าน", "โดย", "จาก", "ที่", "ไปยัง", "ถึง"]
+    }
+  },
+  "fixtures": [
+    {
+      "name": "BBL ATM withdrawal (English)",
+      "sender": "BBL",
+      "receivedAt": "2026-01-21T14:32:00.000Z",
+      "body": "BBL: Withdrawal 2,000.00 THB from A/C x1234 via ATM on 21/01/26 14:32 Bal 15,820.45 THB",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "2000.00",
+          "transactionType": "EXPENSE",
+          "accountLast4": "1234",
+          "balance": "15820.45"
+        }
+      }
+    },
+    {
+      "name": "BBL deposit (English)",
+      "sender": "BBL",
+      "receivedAt": "2026-01-21T16:01:00.000Z",
+      "body": "BBL: Deposit 5,000.00 THB to A/C x1234 on 21/01/26 16:01 Bal 20,820.45 THB",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "5000.00",
+          "transactionType": "INCOME",
+          "accountLast4": "1234",
+          "balance": "20820.45"
+        }
+      }
+    },
+    {
+      "name": "BBL transfer out (Thai)",
+      "sender": "BBL",
+      "receivedAt": "2026-01-22T09:15:00.000Z",
+      "body": "BBL: โอนเงินออก 1,500.00 บาท บช x1234 คงเหลือ 19,320.45 บาท",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "1500.00",
+          "transactionType": "EXPENSE",
+          "accountLast4": "1234",
+          "balance": "19320.45"
+        }
+      }
+    },
+    {
+      "name": "BBL credit card spending with merchant (synthesized)",
+      "sender": "BANGKOK BANK",
+      "receivedAt": "2026-01-23T18:40:00.000Z",
+      "body": "BBL: Credit card spending 3,500.00 THB Card x9012 at CENTRAL WORLD on 23/01/26 18:40 Available limit 46,500.00 THB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "3500.00",
+          "transactionType": "CREDIT",
+          "merchant": "CENTRAL WORLD",
+          "accountLast4": "9012",
+          "creditLimit": "46500.00"
+        }
+      }
+    },
+    {
+      "name": "BBL PromptPay receive (Thai, synthesized)",
+      "sender": "BBL",
+      "receivedAt": "2026-01-24T11:05:00.000Z",
+      "body": "BBL: รับเงินพร้อมเพย์ 2,500.00 บาท บช x1234 คงเหลือ 21,820.45 บาท",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "2500.00",
+          "transactionType": "INCOME",
+          "accountLast4": "1234",
+          "balance": "21820.45"
+        }
+      }
+    },
+    {
+      "name": "OTP message is filter-rejected",
+      "sender": "BBL",
+      "receivedAt": "2026-01-25T10:00:00.000Z",
+      "body": "BBL: รหัส OTP ของคุณคือ 123456 ใช้ภายใน 5 นาที ห้ามบอกรหัสนี้แก่ผู้อื่น",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

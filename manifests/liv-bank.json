@@ -1,0 +1,278 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro LivBankParser.kt + UAEBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/). Liv is the Emirates NBD digital bank (UAE, AED). Formats covered: \"Purchase of <CCY> <amt> with Debit/Credit Card ending NNNN at MERCHANT, ... Avl Balance is AED ...\", \"<amt> has been credited to account ...\" (salary/refund/cashback credits, normalized merchant \"Account Credit\"), and ATM withdrawals. The Kotlin income keywords (has been credited / credited to account / refund / cashback) are checked BEFORE expense keywords, so they are applied as a pipeline setFieldWhen step ahead of typeRules classification."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "ae.liv.bank",
+    "type": "sms-parser",
+    "name": "Liv Bank",
+    "country": "AE",
+    "currency": "AED",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["LIV"],
+      "dltPatterns": ["^[A-Z]{2}-LIV-[A-Z]$", "LIV"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "do not share",
+        "activation",
+        "has been blocked",
+        "has been activated",
+        "failed",
+        "declined",
+        "insufficient balance"
+      ],
+      "requireAnyKeyword": [
+        "has been credited",
+        "purchase of",
+        "debit card ending",
+        "credit card ending",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?:purchase of|transfer of|amount|for|of)\\s+(?!JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]{3}\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "\\b(?!JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]{3}\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "\\b(?!JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]{3}\\s+\\*+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Current balance is\\s+[A-Z]{3}\\s+(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avl Balance is\\s+[A-Z]{3}\\s+(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Balance:?\\s+[A-Z]{3}\\s+(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:Debit|Credit)\\s+Card ending\\s+(?<value>\\d{4})"
+        },
+        {
+          "re": "account\\s+(?<value>[0-9A-Z]+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "credit": ["credit card purchase"],
+      "expense": [
+        "purchase of",
+        "debit card purchase",
+        "debited",
+        "withdrawn",
+        "cheque returned",
+        "outward remittance",
+        "payment instructions",
+        "has been processed",
+        "purchase",
+        "payment",
+        "spent",
+        "charged",
+        "paid",
+        "deducted"
+      ],
+      "income": [
+        "cheque credited",
+        "inward remittance",
+        "cash deposit",
+        "is credited",
+        "credited",
+        "deposited",
+        "received"
+      ],
+      "transfer": ["funds transfer request"]
+    },
+    "cardRules": {
+      "includeKeywords": [
+        "debit card ending",
+        "credit card ending",
+        "purchase of",
+        "card ending",
+        "card xx",
+        "debit card",
+        "credit card",
+        "card no.",
+        "card number"
+      ],
+      "excludeKeywords": []
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*$",
+        "\\s+on\\s+\\d{2}.*$",
+        "\\s+UPI.*$",
+        "\\s+at\\s+\\d{2}:\\d{2}.*$",
+        "\\s*-\\s*$",
+        "\\s+PVT\\.?\\s+LTD\\.?$",
+        "\\s+LTD\\.?$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "extractFieldWhen",
+        "when": {
+          "containsAny": ["purchase of"]
+        },
+        "field": "merchant",
+        "extractors": [
+          {
+            "re": "at\\s+(?<value>[^,]+?)(?:,|\\s+Avl|\\.\\s)"
+          },
+          {
+            "re": "at\\s+(?<value>[^.]+?)(?:\\s+Avl|,)"
+          }
+        ]
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["has been credited"]
+        },
+        "field": "merchant",
+        "value": "Account Credit"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["has been credited", "credited to account", "refund", "cashback"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "debit card purchase with merchant and balance",
+      "sender": "AD-LIV-A",
+      "receivedAt": "2026-05-12T09:15:00.000Z",
+      "body": "Purchase of AED 156.50 with Debit Card ending 1234 at CARREFOUR MALL OF EMIRATES, Dubai. Avl Balance is AED 4,843.50.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "156.50",
+          "merchant": "CARREFOUR MALL OF EMIRATES",
+          "accountLast4": "1234",
+          "balance": "4843.50",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "salary credit to account",
+      "sender": "LIV",
+      "receivedAt": "2026-05-31T06:00:00.000Z",
+      "body": "Your salary of AED 12,500.00 has been credited to account 0123456789. Current balance is AED 15,230.75.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "12500.00",
+          "merchant": "Account Credit",
+          "accountLast4": "6789",
+          "balance": "15230.75",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "credit card purchase in foreign currency",
+      "sender": "AD-LIV-B",
+      "receivedAt": "2026-05-20T18:42:00.000Z",
+      "body": "Credit Card Purchase of USD 49.99 with Credit Card ending 5678 at NETFLIX.COM. Avl Balance is AED 2,000.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "49.99",
+          "merchant": "NETFLIX.COM",
+          "accountLast4": "5678",
+          "balance": "2000.00",
+          "transactionType": "CREDIT"
+        }
+      }
+    },
+    {
+      "name": "refund credited to account",
+      "sender": "LIV",
+      "receivedAt": "2026-06-02T11:30:00.000Z",
+      "body": "A refund of AED 75.50 has been credited to your account 9876543210. Current balance is AED 1,500.00.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "75.50",
+          "merchant": "Account Credit",
+          "accountLast4": "3210",
+          "balance": "1500.00",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal without merchant goes to review",
+      "sender": "LIV",
+      "receivedAt": "2026-05-05T14:10:00.000Z",
+      "body": "AED 500.00 has been withdrawn from your account 0123456789. Avl Balance is AED 2,300.00.",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "500.00",
+          "accountLast4": "6789",
+          "balance": "2300.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "LIV",
+      "receivedAt": "2026-05-01T08:00:00.000Z",
+      "body": "Liv: Your OTP for login is 123456. Valid for 5 minutes. Do not share it with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

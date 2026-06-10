@@ -1,0 +1,181 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro LaxmiBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/LaxmiBankParser.kt). Laxmi Sunrise Bank (Nepal, NPR). Message shape: \"Dear Customer, Your #12344560 has been debited by NPR 720.00 on 05/09/25. Remarks:ESEWA LOAD/9763698550,127847587\\n-Laxmi Sunrise\" Merchant comes from the Remarks field: \"ESEWA LOAD\" remarks normalize to \"ESEWA\", \"STIPEND PMT\" remarks to \"Stipend Payment\", otherwise the remarks text before the first \"/\" is used. Reference is the DD/MM/YY date after \"on\" (the Kotlin parser used the date as the reference)."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "np.laxmi.bank",
+    "type": "sms-parser",
+    "name": "Laxmi Sunrise Bank",
+    "country": "NP",
+    "currency": "NPR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["LAXMI_ALERT", "LAXMI", "LAXMISUNRISE"],
+      "dltPatterns": ["LAXMI", "^[A-Z]{2}-LAXMI-[A-Z]$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "ignore if already paid"
+      ],
+      "requireAnyKeyword": [
+        "dear customer",
+        "has been debited",
+        "has been credited",
+        "laxmi sunrise",
+        "remarks:",
+        "npr",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "NPR\\s+(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s"
+        },
+        {
+          "re": "NPR\\s+(?<value>[0-9,]+(?:\\.[0-9]{2})?)(?:\\s|$)"
+        },
+        {
+          "re": "(?:debited|credited)\\s+by\\s+NPR\\s+(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "Remarks:\\s*\\(?(?<value>[^)/\\n]+)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "on\\s+(?<value>\\d{2}/\\d{2}/\\d{2})"
+        },
+        {
+          "re": "Remarks:.*?(?<value>[0-9]{6,})"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "Your\\s+#(?<value>\\d+)\\s+has\\s+been",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["has been debited", "debited by"],
+      "income": ["has been credited", "credited by"]
+    },
+    "cleaning": {
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["esewa load"]
+        },
+        "field": "merchant",
+        "value": "ESEWA"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["stipend pmt"]
+        },
+        "field": "merchant",
+        "value": "Stipend Payment"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "debit transaction - eSewa load",
+      "sender": "LAXMI_ALERT",
+      "receivedAt": "2025-09-05T10:15:00.000Z",
+      "body": "Dear Customer, Your #12344560 has been debited by NPR 720.00 on 05/09/25. Remarks:ESEWA LOAD/9763698550,127847587\n-Laxmi Sunrise",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "720.00",
+          "merchant": "ESEWA",
+          "accountLast4": "4560",
+          "transactionType": "EXPENSE",
+          "reference": "05/09/25"
+        }
+      }
+    },
+    {
+      "name": "credit transaction - stipend",
+      "sender": "LAXMI_ALERT",
+      "receivedAt": "2025-09-02T09:00:00.000Z",
+      "body": "Dear Customer, Your #12344560 has been credited by NPR 60,892.00 on 02/09/25. Remarks:(STIPEND PMT DM/MCH-SHRAWAN82).\n-Laxmi Sunrise",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "60892.00",
+          "merchant": "Stipend Payment",
+          "accountLast4": "4560",
+          "transactionType": "INCOME",
+          "reference": "02/09/25"
+        }
+      }
+    },
+    {
+      "name": "debit transaction - ATM withdrawal",
+      "sender": "LAXMI",
+      "receivedAt": "2025-09-10T12:30:00.000Z",
+      "body": "Dear Customer, Your #98765432 has been debited by NPR 1,500.00 on 10/09/25. Remarks:ATM WITHDRAWAL/KATHMANDU\n-Laxmi Sunrise",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1500.00",
+          "merchant": "ATM WITHDRAWAL",
+          "accountLast4": "5432",
+          "transactionType": "EXPENSE",
+          "reference": "10/09/25"
+        }
+      }
+    },
+    {
+      "name": "credit transaction - salary via DLT sender",
+      "sender": "AD-LAXMI-A",
+      "receivedAt": "2025-09-15T08:00:00.000Z",
+      "body": "Dear Customer, Your #1234 has been credited by NPR 5,000.00 on 15/09/25. Remarks:SALARY CREDIT\n-Laxmi Sunrise",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "merchant": "SALARY CREDIT",
+          "accountLast4": "1234",
+          "transactionType": "INCOME",
+          "reference": "15/09/25"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "LAXMI_ALERT",
+      "receivedAt": "2025-09-20T11:00:00.000Z",
+      "body": "Dear Customer, Your OTP for Laxmi Sunrise mobile banking login is 482910. Do not share it with anyone.\n-Laxmi Sunrise",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

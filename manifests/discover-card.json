@@ -1,0 +1,165 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro DiscoverCardParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/DiscoverCardParser.kt). Discover Card alerts are USD credit-card transaction notifications; every transaction alert is typed EXPENSE, matching the Kotlin parser. Alerts carry no account/card last-4, so accountLast4 stays unset (real bank/card parser, no wallet fallback)."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "us.discover.card",
+    "type": "sms-parser",
+    "name": "Discover Card",
+    "country": "US",
+    "currency": "USD",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["DISCOVER", "DISCOVERCARD", "347268"],
+      "dltPatterns": ["^.*DISCOVERCARD.*$", "^[A-Z]{2}-DISCOVER-[A-Z]$"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "one time password", "verification code"],
+      "requireAnyKeyword": [
+        "discover card alert:",
+        "transaction of",
+        "no action needed",
+        "see it at https://app.discover.com",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "transaction of\\s+\\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        },
+        {
+          "re": "A transaction of\\s+\\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        },
+        {
+          "re": "\\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+at"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "at\\s+(?<value>[^\\s]+(?:\\s+[^\\s]*)*?)(?:\\s+on|\\s+Text|$)"
+        },
+        {
+          "re": "at\\s+(?<value>PAYPAL\\s+\\*[^\\s]+)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "on\\s+(?<value>\\w+\\s+\\d{1,2},\\s+\\d{4})"
+        },
+        {
+          "re": "\\bRef\\s*(?:No)?[.:\\s]+(?<value>[A-Za-z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "card\\s+ending\\s+(?:in\\s+)?(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "card\\s+[Xx*]+(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "A/c\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["discover card alert", "transaction of", "transaction"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\([^)]*\\)\\s*$",
+        "\\s+Ref\\s+No.*$",
+        "\\s+PVT\\.?\\s+LTD\\.?$",
+        "\\s+LTD\\.?$",
+        "\\s*-\\s*$"
+      ],
+      "minMerchantLength": 2
+    }
+  },
+  "fixtures": [
+    {
+      "name": "standard transaction with date",
+      "sender": "347268",
+      "receivedAt": "2025-02-21T10:00:00.000Z",
+      "body": "Discover Card Alert: A transaction of $25.00 at WWW.XXX.ORG on February 21, 2025. No Action needed. See it at https://app.discover.com/ACTVT. Text STOP to end",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25.00",
+          "merchant": "WWW.XXX.ORG",
+          "transactionType": "EXPENSE",
+          "reference": "February 21, 2025"
+        }
+      }
+    },
+    {
+      "name": "paypal transaction",
+      "sender": "DISCOVER",
+      "receivedAt": "2025-07-20T10:00:00.000Z",
+      "body": "Discover Card Alert: A transaction of $5.36 at PAYPAL *SParkXXX on July 20, 2025. No Action needed. See it at https://app.discover.com/ACTVT. Text STOP to end",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5.36",
+          "merchant": "PAYPAL *SParkXXX",
+          "transactionType": "EXPENSE",
+          "reference": "July 20, 2025"
+        }
+      }
+    },
+    {
+      "name": "alternative sender format",
+      "sender": "US-DISCOVER-A",
+      "receivedAt": "2025-03-15T10:00:00.000Z",
+      "body": "Discover Card Alert: A transaction of $99.99 at NETFLIX.COM on March 15, 2025. No Action needed. See it at https://app.discover.com/ACTVT. Text STOP to end",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "99.99",
+          "merchant": "NETFLIX.COM",
+          "transactionType": "EXPENSE",
+          "reference": "March 15, 2025"
+        }
+      }
+    },
+    {
+      "name": "different merchant format",
+      "sender": "347268",
+      "receivedAt": "2025-04-10T10:00:00.000Z",
+      "body": "Discover Card Alert: A transaction of $42.50 at STARBUCKS STORE #1234 on April 10, 2025. No Action needed. See it at https://app.discover.com/ACTVT. Text STOP to end",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "42.50",
+          "merchant": "STARBUCKS STORE #1234",
+          "transactionType": "EXPENSE",
+          "reference": "April 10, 2025"
+        }
+      }
+    },
+    {
+      "name": "verification code message is filter-rejected",
+      "sender": "DISCOVER",
+      "receivedAt": "2025-05-01T10:00:00.000Z",
+      "body": "Discover: Your verification code is 123456. Do not share this code with anyone. Text STOP to end",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

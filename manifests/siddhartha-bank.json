@@ -1,0 +1,186 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro SiddharthaBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/SiddharthaBankParser.kt). Siddhartha Bank Limited (Nepal). The Kotlin parser keys everything off the \"NPR <amount> withdrawn/deposited ... for <narrative>\" SMS shape from the SBL_Alert sender. Merchant resolution in Kotlin is an ordered if/else chain (QR payment > NEA > fund transfer (IBFT) > deposit), emulated here with an extractor for the QR case plus guarded pipeline setFieldWhen steps."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "np.siddhartha.bank",
+    "type": "sms-parser",
+    "name": "Siddhartha Bank",
+    "country": "NP",
+    "currency": "NPR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["SBL_Alert", "SBL-Alert", "SBL_ALERT", "SIDDHARTHA"],
+      "dltPatterns": ["^.*SBL.*$", "^.*SIDDHARTHA.*$"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "password", "verification code"],
+      "requireAnyKeyword": ["withdrawn", "deposited", "fund trf", "fund transfer", "qr payment"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "NPR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "qr payment to\\s+(?<value>[^-\\n]+?)(?:\\s+-|$)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "\\((?<value>IN-\\d+)"
+        },
+        {
+          "re": "IBFT:(?<value>\\d+)"
+        },
+        {
+          "re": "FON:IBFT:(?<value>\\d+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "AC\\s+(?<value>[X#\\d]+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["withdrawn"],
+      "income": ["deposited", "credited"]
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["nea"],
+          "notContainsAny": ["qr payment"]
+        },
+        "field": "merchant",
+        "value": "Nepal Electricity Authority"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["fund trf to", "fund transfer to", "fund trf frm", "fund transfer from"],
+          "containsAll": ["ibft"],
+          "notContainsAny": ["qr payment", "nea"]
+        },
+        "field": "merchant",
+        "value": "Fund Transfer (IBFT)"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["fund trf to", "fund transfer to", "fund trf frm", "fund transfer from"],
+          "notContainsAny": ["qr payment", "nea", "ibft"]
+        },
+        "field": "merchant",
+        "value": "Fund Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["deposited"],
+          "notContainsAny": ["qr payment", "nea", "fund trf", "fund transfer"]
+        },
+        "field": "merchant",
+        "value": "Deposit"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "debit - fund transfer (IBFT)",
+      "sender": "SBL_Alert",
+      "receivedAt": "2025-12-09T12:31:20.000Z",
+      "body": "Dear [NAME], AC ###XXXX1234, NPR 97.00 withdrawn on 09/12/2025 12:31:20 for Fund Trf to A/C PAYABLE IBFT (IN-670725619,222",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "97.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Fund Transfer (IBFT)",
+          "accountLast4": "1234",
+          "reference": "IN-670725619"
+        }
+      }
+    },
+    {
+      "name": "debit - QR payment",
+      "sender": "SBL_Alert",
+      "receivedAt": "2025-12-05T18:06:50.000Z",
+      "body": "Dear [NAME], AC ###XXXX1234, NPR 810.00 withdrawn on 05/12/2025 18:06:50 for QR Payment to FALCHA KHAJA GHAR - falcha",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "810.00",
+          "transactionType": "EXPENSE",
+          "merchant": "FALCHA KHAJA GHAR",
+          "accountLast4": "1234"
+        }
+      }
+    },
+    {
+      "name": "credit - deposit via fund transfer (IBFT)",
+      "sender": "SBL_Alert",
+      "receivedAt": "2025-11-28T20:13:59.000Z",
+      "body": "Dear [NAME], AC ###XXXX1234, NPR 120,000.00 deposited on 28/11/2025 20:13:59 for Fund Trf frm A/C PAYABLE IBF-FON:IBFT:1171853",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "120000.00",
+          "transactionType": "INCOME",
+          "merchant": "Fund Transfer (IBFT)",
+          "accountLast4": "1234",
+          "reference": "1171853"
+        }
+      }
+    },
+    {
+      "name": "debit - utility bill (NEA)",
+      "sender": "SBL_Alert",
+      "receivedAt": "2025-12-09T12:29:06.000Z",
+      "body": "Dear [NAME], AC ###XXXX1234, NPR 1,822.00 withdrawn on 09/12/2025 12:29:06 for Fund Trf to A/C PAYABLE IBFT (IN-670724040,NEA",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1822.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Nepal Electricity Authority",
+          "accountLast4": "1234",
+          "reference": "IN-670724040"
+        }
+      }
+    },
+    {
+      "name": "credit - plain deposit",
+      "sender": "SBL-Alert",
+      "receivedAt": "2025-12-01T10:00:00.000Z",
+      "body": "Dear Customer, AC ###XXXX5678, NPR 500.00 deposited on 01/12/2025 10:00:00 for deposit",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "transactionType": "INCOME",
+          "merchant": "Deposit",
+          "accountLast4": "5678"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "SBL_Alert",
+      "receivedAt": "2025-12-10T09:00:00.000Z",
+      "body": "Dear Customer, your OTP for Siddhartha BankSmart login is 482913. Do not share this code with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

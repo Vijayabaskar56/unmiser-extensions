@@ -1,0 +1,279 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro EmiratesNBDParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/EmiratesNBDParser.kt) and its UAEBankParser base class. Fixture bodies come verbatim from EmiratesNBDParserTest.kt. Deviations from the Kotlin parser (engine limitations): - UAEBankParser.extractCurrency() reads the per-message currency (USD/EUR/ GBP); the manifest engine always reports the static manifest currency (\"AED\"), so multi-currency fixtures do not assert `currency`. - The Kotlin month-abbreviation guard on the currency token is approximated with a negative lookahead inside the amount regexes. - Kotlin extracts the available limit only for CREDIT transactions; the engine extracts `creditLimit` whenever the pattern matches. - Kotlin's income keywords (\"credited\" etc.) outrank \"purchase of\"+\"credit card\"; the engine's fixed credit>expense>income priority is overridden via ordered pipeline setFieldWhen steps to preserve the Kotlin order."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "ae.emiratesnbd.bank",
+    "type": "sms-parser",
+    "name": "Emirates NBD",
+    "country": "AE",
+    "currency": "AED",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["EmiratesNBD", "ENBD", "EmiratesNB"],
+      "dltPatterns": ["ENBD", "EMIRATES\\s*NB"]
+    },
+    "filter": {
+      "requireAnyKeyword": [
+        "purchase of",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "transfer"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?:purchase of|transfer of|amount|for|of)\\s+(?!(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\\b)[A-Z]{3}\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "\\b(?!(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\\b)[A-Z]{3}\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "\\b(?!(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\\b)[A-Z]{3}\\s+\\*+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "at\\s+(?<value>.+?)(?:\\.\\s*Avl|$)"
+        },
+        {
+          "re": "to\\s+(?<value>[A-Z][A-Z0-9\\s]+?)(?:\\s+on|\\s+\\(|$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Avl\\s+Bal|Available\\s+Balance)(?:\\s+is)?\\s*[A-Z]{3}\\s+(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+Balance:\\s*[A-Z]{3}\\s+(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "Avl\\s+Cr\\.?\\s+Limit(?:\\s+is)?\\s*[A-Z]{3}\\s+(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+Credit\\s+Limit:\\s*[A-Z]{3}\\s+(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:a/c|account|acct)\\.?\\s*(?:no\\.?)?\\s*[xX*]*(?<value>\\d{2,})",
+          "takeLast4": true
+        },
+        {
+          "re": "ending\\s+(?<value>\\d{4})"
+        },
+        {
+          "re": "[xX]{4}(?<value>\\d{4})"
+        }
+      ]
+    },
+    "typeRules": {
+      "credit": ["credit card purchase"],
+      "expense": [
+        "debited",
+        "withdrawn",
+        "transfer",
+        "debit card purchase",
+        "atm cash withdrawal",
+        "outward remittance",
+        "payment instructions",
+        "has been processed",
+        "cheque returned",
+        "purchase",
+        "payment"
+      ],
+      "income": ["cheque credited", "has been credited", "is credited"]
+    },
+    "cardRules": {
+      "includeKeywords": ["card ending", "credit card", "debit card", "card xx"],
+      "excludeKeywords": ["a/c", "account", "saving account"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\([^)]*\\)\\s*$",
+        "\\s+Ref\\s+No.*$",
+        "\\s+PVT\\.?\\s+LTD\\.?$",
+        "\\s+LTD\\.?$",
+        "[-\\s]+$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": [
+            "credited",
+            "deposited",
+            "refund",
+            "cashback",
+            "received",
+            "inward remittance",
+            "cash deposit"
+          ]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["purchase of", "credit card"],
+          "notContainsAny": ["credited", "deposited", "refund", "cashback", "received"]
+        },
+        "field": "transactionType",
+        "value": "CREDIT"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "credit card purchase with available limit",
+      "sender": "EmiratesNBD",
+      "receivedAt": "2025-12-24T10:00:00.000Z",
+      "body": "Purchase of AED 27.74 with Credit Card ending 9074 at Keeta, Dubai. Avl Cr. Limit is AED 30,978.13",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "27.74",
+          "merchant": "Keeta, Dubai",
+          "accountLast4": "9074",
+          "transactionType": "CREDIT",
+          "creditLimit": "30978.13",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "account debit with available balance (no merchant)",
+      "sender": "ENBD",
+      "receivedAt": "2025-12-24T10:00:00.000Z",
+      "body": "AED 500.00 debited from A/C xxxx1234 on 24-Dec-25. Avl Bal is AED 15,234.50",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "500.00",
+          "accountLast4": "1234",
+          "balance": "15234.50",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "account credit with available balance (no merchant)",
+      "sender": "EmiratesNB",
+      "receivedAt": "2025-12-24T10:00:00.000Z",
+      "body": "AED 2,500.00 credited to A/C xxxx5678 on 24-Dec-25. Available Balance: AED 25,750.00",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "2500.00",
+          "accountLast4": "5678",
+          "balance": "25750.00",
+          "transactionType": "INCOME",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "credit card purchase - simple",
+      "sender": "EmiratesNBD",
+      "receivedAt": "2025-12-24T10:00:00.000Z",
+      "body": "Purchase of AED 150.00 with Credit Card ending 4321 at Mall of Emirates. Avl Cr. Limit is AED 45,000.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "150.00",
+          "merchant": "Mall of Emirates",
+          "accountLast4": "4321",
+          "transactionType": "CREDIT",
+          "creditLimit": "45000.00",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "multi-currency purchase - USD (engine reports manifest currency AED)",
+      "sender": "EmiratesNBD",
+      "receivedAt": "2025-12-24T10:00:00.000Z",
+      "body": "Purchase of USD 100.00 with Credit Card ending 9074 at Amazon.com. Avl Cr. Limit is USD 10,000.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100.00",
+          "merchant": "Amazon.com",
+          "accountLast4": "9074",
+          "transactionType": "CREDIT",
+          "creditLimit": "10000.00"
+        }
+      }
+    },
+    {
+      "name": "multi-currency purchase - EUR (engine reports manifest currency AED)",
+      "sender": "ENBD",
+      "receivedAt": "2025-12-24T10:00:00.000Z",
+      "body": "Purchase of EUR 75.50 with Credit Card ending 4321 at Booking.com. Avl Cr. Limit is EUR 5,000.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "75.50",
+          "merchant": "Booking.com",
+          "accountLast4": "4321",
+          "transactionType": "CREDIT",
+          "creditLimit": "5000.00"
+        }
+      }
+    },
+    {
+      "name": "multi-currency debit - GBP (engine reports manifest currency AED)",
+      "sender": "EmiratesNBD",
+      "receivedAt": "2025-12-25T10:00:00.000Z",
+      "body": "GBP 200.00 debited from A/C xxxx5678 on 25-Dec-25. Avl Bal is GBP 3,500.00",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "200.00",
+          "accountLast4": "5678",
+          "balance": "3500.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "generic credit (factory smoke test body)",
+      "sender": "EmiratesNB",
+      "receivedAt": "2025-12-24T10:00:00.000Z",
+      "body": "AED 1,000.00 credited to your account",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1000.00",
+          "merchant": "your account",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "EmiratesNBD",
+      "receivedAt": "2025-12-24T10:00:00.000Z",
+      "body": "Your One Time Password for Emirates NBD Online Banking login is 482913. Do not share it with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

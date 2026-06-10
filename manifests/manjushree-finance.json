@@ -1,0 +1,193 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro ManjushreeFinanceParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/ManjushreeFinanceParser.kt) plus the BankParser.kt base-class fallbacks the Kotlin parser reaches via super.extractX(...). Manjushree Finance is a Nepali finance company; its alert SMS look like: \"Your A/C ##0168658000001, has been debited by NPR 15,000.00 on 01/04/2026 10:27,Remarks:9769780059~2309320,IBFT,transfer laxmi paudyal~RBB\\nManjushree Finance\""
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "np.manjushree.bank",
+    "type": "sms-parser",
+    "name": "Manjushree Finance",
+    "country": "NP",
+    "currency": "NPR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["MFL_ALERT", "MFL"],
+      "dltPatterns": ["MFL", "MANJUSHREE"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "NPR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "transfer\\s+(?<value>[^,~\\n]+)"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "Remarks[:\\s]*(?<value>[^,]+)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s*[Xx*#]*(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["debited"],
+      "income": ["credited", "deposited"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*",
+        "\\s+on\\s+\\d{2}.*",
+        "\\s+UPI.*",
+        "\\s+at\\s+\\d{2}:\\d{2}.*",
+        "\\s*-\\s*$",
+        "(\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(\\s+LTD\\.?|\\s+LIMITED)$"
+      ],
+      "minMerchantLength": 2
+    }
+  },
+  "fixtures": [
+    {
+      "name": "ibft debit with transfer counterparty",
+      "sender": "MFL_ALERT",
+      "receivedAt": "2026-04-01T10:27:00.000Z",
+      "body": "Your A/C ##0168658000001, has been debited by NPR 15,000.00 on 01/04/2026 10:27,Remarks:9769780059~2309320,IBFT,transfer laxmi paudyal~RBB\nManjushree Finance",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "15000.00",
+          "transactionType": "EXPENSE",
+          "merchant": "laxmi paudyal",
+          "reference": "9769780059~2309320",
+          "accountLast4": "0001"
+        }
+      }
+    },
+    {
+      "name": "ibft credit with transfer counterparty",
+      "sender": "MFL_ALERT",
+      "receivedAt": "2026-05-02T14:05:00.000Z",
+      "body": "Your A/C ##0168658000001, has been credited by NPR 25,500.00 on 02/05/2026 14:05,Remarks:9841000222~2401005,IBFT,transfer ram bahadur~NIC\nManjushree Finance",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25500.00",
+          "transactionType": "INCOME",
+          "merchant": "ram bahadur",
+          "reference": "9841000222~2401005",
+          "accountLast4": "0001"
+        }
+      }
+    },
+    {
+      "name": "cash deposit without counterparty",
+      "sender": "MFL_ALERT",
+      "receivedAt": "2026-05-03T09:12:00.000Z",
+      "body": "Your A/C ##0168658000001, has been deposited by NPR 5,000.00 on 03/05/2026 09:12,Remarks:CASH DEPOSIT,BRANCH KTM\nManjushree Finance",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "5000.00",
+          "transactionType": "INCOME",
+          "reference": "CASH DEPOSIT",
+          "accountLast4": "0001"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "MFL_ALERT",
+      "receivedAt": "2026-05-04T08:00:00.000Z",
+      "body": "Your OTP for Manjushree Finance mobile banking login is 482913. Do not share this code with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

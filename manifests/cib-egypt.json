@@ -1,0 +1,200 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro CIBEgyptParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/CIBEgyptParser.kt). Two formats: credit-card charges (\"Your credit card ending with#8016 was charged for EGP 118.00 at SAOOD MARKET on 24/11/25 at 18:27\") and refunds (\"The transaction on your credit card#8016 from ORACLE IRELAND with EUR .93 ... has been refunded\"). Deviations from the Kotlin parser (engine has no per-message currency extraction): CIB supports international transactions and the Kotlin parser extracts the per-message currency (EUR/USD); the manifest engine always reports the manifest currency (EGP). Amounts written without a leading zero (\"EUR .93\") parse as \".93\" rather than BigDecimal-normalized \"0.93\"."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "eg.cib.bank",
+    "type": "sms-parser",
+    "name": "CIB Egypt",
+    "country": "EG",
+    "currency": "EGP",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["CIB"],
+      "dltPatterns": ["^.*CIB.*$"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "one time password", "verification code"],
+      "requireAnyKeyword": [
+        "was charged",
+        "was debited",
+        "was spent",
+        "has been refunded",
+        "credited"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?:for|with)\\s+[A-Z]{3}\\s+(?<value>[0-9,]*\\.?\\d+)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "at\\s+(?<value>[A-Z0-9\\s\\/&\\-]+?)\\s+on\\s+\\d"
+        },
+        {
+          "re": "from\\s+(?<value>[A-Z0-9\\s\\/&\\-]+?)\\s+with\\s+[A-Z]{3}"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:credit\\s+card|card)\\s*(?:ending\\s+with)?#(?<value>\\d{4})"
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "(?:Card\\s+)?available\\s+limit\\s+is\\s+[A-Z]{3}\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ]
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["refunded"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      }
+    ],
+    "typeRules": {
+      "expense": [
+        "was charged",
+        "was debited",
+        "was spent",
+        "charged",
+        "debited",
+        "spent",
+        "paid",
+        "purchase",
+        "deducted",
+        "withdrawn"
+      ],
+      "income": ["credited", "deposited", "received", "refund", "cashback"]
+    },
+    "cardRules": {
+      "includeKeywords": ["credit card", "debit card", "card ending", "card#"],
+      "excludeKeywords": []
+    }
+  },
+  "fixtures": [
+    {
+      "name": "credit card charge (EGP)",
+      "sender": "CIB",
+      "receivedAt": "2025-11-24T18:27:00.000Z",
+      "body": "Your credit card ending with#8016 was charged for EGP 118.00 at SAOOD MARKET on 24/11/25  at 18:27. Card available limit is EGP  10000.21. For more details, please visit https://cib.eg/mb",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "118.00",
+          "merchant": "SAOOD MARKET",
+          "accountLast4": "8016",
+          "creditLimit": "10000.21",
+          "transactionType": "EXPENSE",
+          "isFromCard": true,
+          "currency": "EGP"
+        }
+      }
+    },
+    {
+      "name": "credit card refund (foreign currency, sub-unit amount)",
+      "sender": "CIB",
+      "receivedAt": "2025-11-15T05:14:00.000Z",
+      "body": "The transaction on your credit card#8016  from ORACLE IRELAND  with EUR .93 on 15/11/25  at 05:14 has been refunded. Please try again. Thank you",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": ".93",
+          "merchant": "ORACLE IRELAND",
+          "accountLast4": "8016",
+          "transactionType": "INCOME",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "large amount charge with thousands separator",
+      "sender": "CIB",
+      "receivedAt": "2025-12-10T14:30:00.000Z",
+      "body": "Your credit card ending with#1234 was charged for EGP 1,500.00 at CARREFOUR EGYPT on 10/12/25  at 14:30. Card available limit is EGP  25000.00. For more details, please visit https://cib.eg/mb",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1500.00",
+          "merchant": "CARREFOUR EGYPT",
+          "accountLast4": "1234",
+          "creditLimit": "25000.00",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "USD charge",
+      "sender": "CIB",
+      "receivedAt": "2026-01-05T09:15:00.000Z",
+      "body": "Your credit card ending with#5678 was charged for USD 99.99 at AMAZON on 05/01/26  at 09:15. Card available limit is EGP  15000.50. For more details, please visit https://cib.eg/mb",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "99.99",
+          "merchant": "AMAZON",
+          "accountLast4": "5678",
+          "creditLimit": "15000.50",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "refund transaction (USD)",
+      "sender": "CIB",
+      "receivedAt": "2025-11-20T12:00:00.000Z",
+      "body": "The transaction on your credit card#9876  from NETFLIX  with USD 15.99 on 20/11/25  at 12:00 has been refunded. Please try again. Thank you",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "15.99",
+          "merchant": "NETFLIX",
+          "accountLast4": "9876",
+          "transactionType": "INCOME",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "OTP message is filter-rejected",
+      "sender": "CIB",
+      "receivedAt": "2025-11-24T10:00:00.000Z",
+      "body": "Your CIB OTP is 123456. Do not share this code with anyone. Valid for 5 minutes.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "promotional message is filter-rejected",
+      "sender": "CIB",
+      "receivedAt": "2025-11-24T10:00:00.000Z",
+      "body": "CIB: Enjoy 10% cashback on all purchases this weekend! Terms and conditions apply.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "account balance notification is filter-rejected",
+      "sender": "CIB",
+      "receivedAt": "2025-11-24T10:00:00.000Z",
+      "body": "Your CIB account balance is EGP 50,000.00 as of 24/11/25.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,161 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro AlinmaBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/AlinmaBankParser.kt). Alinma Bank (Saudi Arabia) sends Arabic-language SMS: \"شراء\" = purchase, \"بمبلغ\"/\"مبلغ\" = amount, \"الرصيد\" = balance, \"من\"/\"لدى\" = from/at (merchant), \"حساب\" = account, \"البطاقة\"/\"بطاقة مدى\" = (Mada) card, \"نقاط البيع\" = POS. Fixture bodies are taken verbatim from AlinmaBankParserTest.kt."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "sa.alinma.bank",
+    "type": "sms-parser",
+    "name": "Alinma Bank",
+    "country": "SA",
+    "currency": "SAR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["Alinma", "ALINMA", "الإنماء"],
+      "dltPatterns": [".*ALINMA.*", ".*الإنماء.*"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "رمز", "كلمة المرور"],
+      "requireAnyKeyword": ["شراء", "مبلغ", "الرصيد", "purchase", "pos"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "بمبلغ:\\s*(?<value>[0-9]+(?:\\.[0-9]{2})?)\\s*SAR"
+        },
+        {
+          "re": "مبلغ:\\s*SAR\\s*(?<value>[0-9]+(?:\\.[0-9]{2})?)"
+        },
+        {
+          "re": "مبلغ:\\s*ريال سعودى\\s*(?<value>[0-9]+(?:\\.[0-9]{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "من:\\s*(?<value>[^\\n]+?)(?:\\n|في:)"
+        },
+        {
+          "re": "لدى:\\s*(?<value>[^\\n]+?)(?:\\n|في:)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "الرصيد:\\s*(?<value>[0-9]+(?:\\.[0-9]{2})?)\\s*SAR"
+        },
+        {
+          "re": "الرصيد:\\s*(?<value>[0-9]+(?:\\.[0-9]{2})?)\\s*ريال"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "حساب:\\s*\\*+(?<value>\\d{4})"
+        },
+        {
+          "re": "البطاقة:\\s*\\*+(?<value>\\d{4})"
+        },
+        {
+          "re": "البطاقة الائتمانية:\\s*\\*+(?<value>\\d{4})"
+        },
+        {
+          "re": "بطاقة مدى:\\s*(?<value>\\d{4})\\*"
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["شراء", "purchase"],
+      "income": ["إيداع", "deposit"]
+    },
+    "cardRules": {
+      "includeKeywords": ["بطاقة", "pos", "نقاط البيع"],
+      "excludeKeywords": []
+    },
+    "pipeline": [
+      {
+        "kind": "fallbackField",
+        "field": "merchant",
+        "value": "POS Transaction"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "samsung wallet pos purchase - generic",
+      "sender": "Alinma",
+      "receivedAt": "2025-10-10T20:00:00.000Z",
+      "body": "شراء محلي من نقاط البيع\nعبر Samsung Wallet\nبمبلغ: 50 SAR\nالبطاقة: **1234\nحساب: **5678\nمن: Establishment Name\nفي: 2025-10-10 20:00:00\nالرصيد: 500.50 SAR",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "50",
+          "merchant": "Establishment Name",
+          "accountLast4": "5678",
+          "balance": "500.50",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "samsung wallet pos purchase - meed express",
+      "sender": "Alinma",
+      "receivedAt": "2025-10-15T08:44:32.000Z",
+      "body": "شراء محلي من نقاط البيع\nعبر Samsung Wallet\nبمبلغ: 3 SAR\nالبطاقة: **0000\nحساب: **0000\nمن: Meed Express\nفي: 2025-10-15 08:44:32\nالرصيد: 101.00 SAR",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "3",
+          "merchant": "Meed Express",
+          "accountLast4": "0000",
+          "balance": "101.00",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "credit card pos purchase",
+      "sender": "Alinma",
+      "receivedAt": "2025-10-20T12:00:00.000Z",
+      "body": "شراء عبر: POS\nالبطاقة الائتمانية: **9999\nمبلغ: SAR 125.50\nلدى: Commercial Self-Technolog\nفي: 12:00 2025-10-20\nالرصيد: 875.75 ريال",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "125.50",
+          "merchant": "Commercial Self-Technolog",
+          "accountLast4": "9999",
+          "balance": "875.75",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "mada card purchase - samsung wallet",
+      "sender": "Alinma",
+      "receivedAt": "2025-10-10T21:00:00.000Z",
+      "body": "شراء عبر Samsung Wallet\nمبلغ: ريال سعودى 75.25\nبطاقة مدى: 7777*\nحساب: *8888\nمن: Establishment Name\nفي: 2025-10-10 21:00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "75.25",
+          "merchant": "Establishment Name",
+          "accountLast4": "8888",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "otp verification code is filter-rejected",
+      "sender": "Alinma",
+      "receivedAt": "2025-10-12T09:30:00.000Z",
+      "body": "رمز التحقق الخاص بك لإتمام عملية الشراء هو 123456. لا تشارك الرمز مع أي شخص.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

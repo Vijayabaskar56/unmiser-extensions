@@ -1,0 +1,199 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro NavyFederalParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/NavyFederalParser.kt). Navy Federal Credit Union (NFCU) — USD debit/credit card approval alerts: \"NFCU: Transaction for $3.26 was approved on debit card 1234 at Google One at 08:19 PM EDT on 05/06/25.Txt STOP to opt-out. Txt HELP for help.\" Declined transactions are intentionally not tracked (Kotlin isTransactionMessage returns false for \"was declined\")."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "us.navyfederal.bank",
+    "type": "sms-parser",
+    "name": "Navy Federal Credit Union",
+    "country": "US",
+    "currency": "USD",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["NFCU", "NAVYFED"],
+      "dltPatterns": ["^[A-Z]{2}-NFCU-[A-Z]$", ".*NAVY ?FEDERAL.*"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "was declined",
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "transaction for",
+        "was approved on",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Transaction for \\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+was approved"
+        },
+        {
+          "re": "Transaction for \\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+was declined"
+        },
+        {
+          "re": "for \\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+was approved"
+        },
+        {
+          "re": "for \\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+was declined"
+        },
+        {
+          "re": "\\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "on (?:debit|credit) card \\d{4} at (?<value>.+?)\\s+at \\d{2}:\\d{2}"
+        },
+        {
+          "re": "on (?:debit|credit) card \\d{4} at (?<value>.+?)(?:\\.|$)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "on debit card (?<value>\\d{4})"
+        },
+        {
+          "re": "on credit card (?<value>\\d{4})"
+        },
+        {
+          "re": "(?:debit|credit) card (?<value>\\d{4})"
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["was approved"],
+      "credit": ["payment received", "deposit"]
+    },
+    "cardRules": {
+      "includeKeywords": ["debit card", "credit card", "card ending", "card xx"],
+      "excludeKeywords": []
+    },
+    "cleaning": {
+      "stripPatterns": ["Txt STOP.*"],
+      "minMerchantLength": 2
+    }
+  },
+  "fixtures": [
+    {
+      "name": "debit card transaction at Google One",
+      "sender": "NFCU",
+      "receivedAt": "2025-05-06T20:19:00.000Z",
+      "body": "NFCU: Transaction for $3.26 was approved on debit card 1234 at Google One at 08:19 PM EDT on 05/06/25.Txt STOP to opt-out. Txt HELP for help.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "3.26",
+          "merchant": "Google One",
+          "accountLast4": "1234",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "large debit card transaction with comma amount",
+      "sender": "NFCU",
+      "receivedAt": "2025-05-08T11:45:00.000Z",
+      "body": "NFCU: Transaction for $1,250.00 was approved on debit card 9012 at Best Buy at 11:45 AM PST on 05/08/25.Txt STOP to opt-out. Txt HELP for help.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1250.00",
+          "merchant": "Best Buy",
+          "accountLast4": "9012",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "credit card transaction at Target",
+      "sender": "NFCU",
+      "receivedAt": "2025-05-09T16:15:00.000Z",
+      "body": "NFCU: Transaction for $45.75 was approved on credit card 3456 at Target at 04:15 PM EDT on 05/09/25.Txt STOP to opt-out. Txt HELP for help.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "45.75",
+          "merchant": "Target",
+          "accountLast4": "3456",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "multi-word merchant",
+      "sender": "NFCU",
+      "receivedAt": "2025-05-10T18:30:00.000Z",
+      "body": "NFCU: Transaction for $89.99 was approved on debit card 7890 at Whole Foods Market at 06:30 PM EST on 05/10/25.Txt STOP to opt-out. Txt HELP for help.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "89.99",
+          "merchant": "Whole Foods Market",
+          "accountLast4": "7890",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "alternative sender NAVYFED",
+      "sender": "NAVYFED",
+      "receivedAt": "2025-05-14T08:30:00.000Z",
+      "body": "NAVYFED: Transaction for $15.00 was approved on debit card 8642 at Starbucks at 08:30 AM EST on 05/14/25.Txt STOP to opt-out. Txt HELP for help.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "15.00",
+          "merchant": "Starbucks",
+          "accountLast4": "8642",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "declined transaction is filter-rejected",
+      "sender": "NFCU",
+      "receivedAt": "2025-05-15T13:00:00.000Z",
+      "body": "NFCU: Transaction for $50.00 was declined on debit card 1234 at Walmart at 01:00 PM EDT on 05/15/25.Txt STOP to opt-out. Txt HELP for help.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

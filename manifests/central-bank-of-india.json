@@ -1,0 +1,305 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro CentralBankOfIndiaParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/CentralBankOfIndiaParser.kt) plus the BankParser.kt base-class fallbacks the Kotlin overrides delegate to via super.extractX(...). CBoI SMS shape: \"Credited by Rs.X\" / \"Debited by Rs.X\" narratives with \"from NAME\"/\"to NAME via UPI\", \"Ref No.NNN\", a \"Total Bal Rs.X CR\" / \"Clear Bal Rs.X CR\" tail, and a \"-CBoI\" signature. No original Kotlin tests exist for this parser, so fixtures are synthesized from the parser's regexes and doc comments."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.cboi.bank",
+    "type": "sms-parser",
+    "name": "Central Bank of India",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["CENTBK", "CBOI", "CENTRALBANK", "CENTRAL"],
+      "dltPatterns": ["^.*CENTBK.*$", "^.*CBOI.*$", "^.*CENTRAL.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?:Credited|Debited)\\s+by\\s+Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)\\s+(?:credited|debited)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "\\bfrom\\s+(?<value>[A-Za-z][A-Za-z0-9 ]*?)(?=\\s+via|\\s+Ref|\\s*\\.|\\s*$)"
+        },
+        {
+          "re": "\\bto\\s+(?<value>[A-Za-z][A-Za-z0-9 ]*?)(?=\\s+via|\\s+Ref|\\s*\\.|\\s*$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Total\\s+Bal\\s+Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)\\s+CR"
+        },
+        {
+          "re": "Clear\\s+Bal\\s+Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)\\s+CR"
+        },
+        {
+          "re": "(?:Avl\\s+Bal|Available\\s+Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "Ref\\s+No\\.?\\s*(?<value>\\w+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "account\\s+[X*]*(?<value>\\d{4})"
+        },
+        {
+          "re": "A/C\\s+ending\\s+[X*]*(?<value>\\d{4})"
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "nsccl",
+        "clearing corporation",
+        "nach",
+        "groww",
+        "zerodha",
+        "upstox",
+        "kuvera",
+        "smallcase",
+        "mutual fund",
+        "sip",
+        "elss",
+        "ipo",
+        "folio",
+        "demat",
+        "cdsl",
+        "nsdl"
+      ],
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["credited", "deposited", "received", "refund"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*$",
+        "\\s+on\\s+\\d{2}.*$",
+        "\\s+UPI.*$",
+        "\\s+at\\s+\\d{2}:\\d{2}.*$",
+        "\\s*-\\s*$",
+        "\\s+PVT\\.?\\s+LTD\\.?$",
+        "\\s+LTD\\.?$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["via upi", "credited"],
+          "notContainsAny": ["from ", " to "]
+        },
+        "field": "merchant",
+        "value": "UPI Credit"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["via upi", "debited"],
+          "notContainsAny": ["from ", " to "]
+        },
+        "field": "merchant",
+        "value": "UPI Payment"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["from x", "from *"]
+        },
+        "field": "merchant",
+        "value": "UPI Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["debited", "withdrawn", "paid"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credited", "deposited", "received"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "upi credit with payer name",
+      "sender": "AD-CENTBK-S",
+      "receivedAt": "2026-06-01T10:15:00.000Z",
+      "body": "Your account XX3113 Credited by Rs.500.00 from RAMESH via UPI Ref No.541986000003. Total Bal Rs.15230.50 CR -CBoI",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "RAMESH",
+          "accountLast4": "3113",
+          "balance": "15230.50",
+          "reference": "541986000003",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "upi debit to merchant",
+      "sender": "JM-CENTBK-T",
+      "receivedAt": "2026-06-02T18:40:00.000Z",
+      "body": "Your account XX3113 Debited by Rs.1250.00 to AMAZON PAY via UPI Ref No.541986000111. Total Bal Rs.13980.50 CR -CBoI",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1250.00",
+          "merchant": "AMAZON PAY",
+          "accountLast4": "3113",
+          "balance": "13980.50",
+          "reference": "541986000111",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "masked upi payer becomes UPI Transfer",
+      "sender": "CBOI",
+      "receivedAt": "2026-06-03T09:05:00.000Z",
+      "body": "Your account XX3113 Credited by Rs.2000.00 from XXXXXX1234@okaxis via UPI Ref No.541986000099. Total Bal Rs.17230.50 CR -CBoI",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2000.00",
+          "merchant": "UPI Transfer",
+          "accountLast4": "3113",
+          "balance": "17230.50",
+          "reference": "541986000099",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "upi debit without counterparty falls back to UPI Payment",
+      "sender": "VM-CENTBK-S",
+      "receivedAt": "2026-06-04T14:20:00.000Z",
+      "body": "Your A/C ending XXXX3113 Debited by Rs.99.00 via UPI Ref No.541986000222. Clear Bal Rs.17131.50 CR -CBoI",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "99.00",
+          "merchant": "UPI Payment",
+          "accountLast4": "3113",
+          "balance": "17131.50",
+          "reference": "541986000222",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "comma amount credit with deposited keyword",
+      "sender": "CENTBK",
+      "receivedAt": "2026-06-05T11:00:00.000Z",
+      "body": "Your account XX3113 Credited by Rs.1,00,000.00 from ACME CORP PVT LTD via NEFT Ref No.CBINH26123456789. Total Bal Rs.1,17,131.50 CR -CBoI",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100000.00",
+          "merchant": "ACME CORP",
+          "accountLast4": "3113",
+          "balance": "117131.50",
+          "reference": "CBINH26123456789",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "AD-CENTBK-S",
+      "receivedAt": "2026-06-06T08:00:00.000Z",
+      "body": "Your OTP for Central Bank of India net banking login is 482913. Do not share it with anyone. -CBoI",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "upi collect request is filter-rejected",
+      "sender": "JM-CBOI-T",
+      "receivedAt": "2026-06-07T13:30:00.000Z",
+      "body": "RAJESH has requested Rs.500.00 from you on UPI. Approve in your UPI app. Ignore if already paid. -CBoI",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

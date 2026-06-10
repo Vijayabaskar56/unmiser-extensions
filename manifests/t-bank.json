@@ -1,0 +1,153 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro TBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/TBankParser.kt). T-Bank (formerly Tinkoff), Russia. Formats: Deposit: \"Пополнение, счет RUB. 5000 ₽. Банкомат. Доступно 10028,05 ₽\" Purchase: \"Покупка, счет карты *1023. 3267 ₽. AZS 09117. Доступно 30672,14 ₽\" Transfer: \"Перевод. Счет RUB. 250 ₽. Милана Н. Баланс 0 ₽\" Russian SMS use a comma as the decimal separator (\"10028,05\"). The engine strips commas from amount/balance as thousands separators, so the manifest captures only the integer rubles and drops the kopecks (see notes)."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "ru.tbank.bank",
+    "type": "sms-parser",
+    "name": "T-Bank",
+    "country": "RU",
+    "currency": "RUB",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["TBANK", "T-Bank", "Tinkoff"],
+      "dltPatterns": ["^.*TBANK.*$", "^.*T-BANK.*$", "^.*TINKOFF.*$"]
+    },
+    "filter": {
+      "excludeKeywords": ["код", "пароль", "otp"],
+      "requireAnyKeyword": [
+        "пополнение",
+        "покупка",
+        "перевод",
+        "списание",
+        "снятие",
+        "оплата",
+        "платёж",
+        "платеж",
+        "возврат",
+        "зачисление",
+        "кэшбэк"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?:^|[.,\\s])(?<value>\\d+)(?:,\\d{1,2})?\\s*₽"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "₽\\.\\s+(?<value>.+?)\\.\\s+(?:Доступно|Баланс)"
+        },
+        {
+          "re": "₽\\.\\s+(?!\\s*(?:Доступно|Баланс))(?<value>[^.]+)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Доступно|Баланс)\\s+(?<value>\\d+)(?:,\\d{1,2})?\\s*₽"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "\\*(?<value>\\d{4})"
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["покупка", "списание", "снятие", "перевод", "оплата", "платёж", "платеж"]
+    },
+    "cardRules": {
+      "includeKeywords": ["карты", "карта", "card ending", "debit card", "credit card", "card xx"]
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["пополнение", "зачисление", "возврат", "кэшбэк", "входящий перевод"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "atm deposit",
+      "sender": "Tinkoff",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Пополнение, счет RUB. 5000 ₽. Банкомат. Доступно 10028,05 ₽",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000",
+          "merchant": "Банкомат",
+          "balance": "10028",
+          "transactionType": "INCOME",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "card purchase at gas station",
+      "sender": "Tinkoff",
+      "receivedAt": "2026-06-02T08:30:00.000Z",
+      "body": "Покупка, счет карты *1023. 3267 ₽. AZS 09117. Доступно 30672,14 ₽",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "3267",
+          "merchant": "AZS 09117",
+          "accountLast4": "1023",
+          "balance": "30672",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "outgoing transfer",
+      "sender": "TBANK",
+      "receivedAt": "2026-06-03T19:45:00.000Z",
+      "body": "Перевод. Счет RUB. 250 ₽. Милана Н. Баланс 0 ₽",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "250",
+          "merchant": "Милана Н",
+          "balance": "0",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "incoming transfer classified as income despite перевод keyword",
+      "sender": "T-Bank",
+      "receivedAt": "2026-06-04T12:15:00.000Z",
+      "body": "Входящий перевод, счет RUB. 1500 ₽. Иван П. Доступно 11528 ₽",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1500",
+          "merchant": "Иван П",
+          "balance": "11528",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "otp login message is filter-rejected",
+      "sender": "Tinkoff",
+      "receivedAt": "2026-06-05T09:00:00.000Z",
+      "body": "Код 1234 для входа в Т-Банк. Никому не сообщайте пароль.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

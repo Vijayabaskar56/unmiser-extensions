@@ -1,0 +1,205 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro AirtelPaymentsBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/AirtelPaymentsBankParser.kt) plus the BankParser.kt base-class fallbacks the Kotlin parser reaches via super.extractX(...). Documented formats (from the Kotlin doc comment): - \"Airtel Payments Bank a/c is credited with Rs.20.00. Txn ID: 560992310006. Call 180023400 for help\" - \"Rs. 5.00 debited from Airtel Payments Bank a/c Txn ID xxxxxxxx Bal:15.56 Call 180023400 for help\" Airtel Payments Bank accounts are mobile-number based, so transaction SMS never carry account last-4 digits (the Kotlin parser returns null). Like JioPay, we route to the provider \"account\" via the \"0000\" fallback so resolution can match a linked Airtel Payments Bank account."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.airtel.bank",
+    "type": "sms-parser",
+    "name": "Airtel Payments Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["AD-AIRBNK-S", "XX-AIRBNK-T"],
+      "dltPatterns": [".*AIRBNK.*"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "verification", "request", "failed"],
+      "requireAnyKeyword": [
+        "credited",
+        "debited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "credited\\s+with\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+debited\\s+from"
+        },
+        {
+          "re": "debited\\s+with\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "Txn\\s+ID[:\\s]+(?<value>[0-9A-WYZ]+)"
+        },
+        {
+          "re": "Transaction\\s+ID[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Bal[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Balance[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": ["iccl", "nsccl", "groww", "zerodha", "sip", "mutual fund", "demat", "ipo"],
+      "expense": ["withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["deposited", "received", "refund"]
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credit"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["debit"],
+          "notContainsAny": ["credit"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["airtel payments bank"]
+        },
+        "field": "merchant",
+        "value": "Airtel Payments Bank Transaction"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "merchant",
+        "value": "Airtel Payments Bank"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "accountLast4",
+        "value": "0000"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "credit with txn id (documented format)",
+      "sender": "AD-AIRBNK-S",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Airtel Payments Bank a/c is credited with Rs.20.00. Txn ID: 560992310006. Call 180023400 for help",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "20.00",
+          "transactionType": "INCOME",
+          "merchant": "Airtel Payments Bank Transaction",
+          "reference": "560992310006",
+          "accountLast4": "0000",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "debit with masked txn id and balance (documented format)",
+      "sender": "XX-AIRBNK-T",
+      "receivedAt": "2026-06-02T12:30:00.000Z",
+      "body": "Rs. 5.00 debited from Airtel Payments Bank a/c Txn ID xxxxxxxx Bal:15.56 Call 180023400 for help",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Airtel Payments Bank Transaction",
+          "balance": "15.56",
+          "reference": "ID",
+          "accountLast4": "0000",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "debited-with variant with txn id and balance",
+      "sender": "AX-AIRBNK-P",
+      "receivedAt": "2026-06-03T09:15:00.000Z",
+      "body": "Airtel Payments Bank a/c debited with Rs.150.00. Txn ID: 561234567890. Bal: 849.50 Call 180023400 for help",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "150.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Airtel Payments Bank Transaction",
+          "balance": "849.50",
+          "reference": "561234567890",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "AD-AIRBNK-S",
+      "receivedAt": "2026-06-04T08:00:00.000Z",
+      "body": "Your OTP for Airtel Payments Bank login is 123456. Do not share it with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "failed transaction alert is filter-rejected",
+      "sender": "XX-AIRBNK-T",
+      "receivedAt": "2026-06-05T18:45:00.000Z",
+      "body": "Your transaction of Rs.100.00 from Airtel Payments Bank a/c has failed. Amount will be refunded within 3 working days.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

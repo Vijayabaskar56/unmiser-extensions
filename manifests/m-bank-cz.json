@@ -1,0 +1,128 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro MBankCZParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/MBankCZParser.kt). Czech mBank SMS formats: Card payment: \"Nová platba kartou\\n100,00 CZK v obchodě MERCHANT.\" Incoming transfer: \"Příchozí platba\\n500,00 CZK od odesílatele SENDER.\" Outgoing transfer: \"Odchozí platba\\n250,00 CZK na účet ACCOUNT.\" Czech uses a comma decimal separator (\"100,00 CZK\"). The engine normalizes amounts by stripping commas (Indian thousands-separator convention), so the extractors capture only the integer-koruna part and drop the haléř decimals (\",00\" in every observed message). See fixture comments for the deviation."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "cz.mbank.bank",
+    "type": "sms-parser",
+    "name": "mBank CZ",
+    "country": "CZ",
+    "currency": "CZK",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["MBANK", "mBank CZ"],
+      "dltPatterns": ["^(?=.*MBANK)(?=.*CZ).*$"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "heslo", "kód"],
+      "requireAnyKeyword": ["platba kartou", "příchozí platba", "odchozí platba", "výběr"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?<value>\\d+),\\d{1,2}\\s*CZK"
+        },
+        {
+          "re": "(?<value>\\d+)\\s*CZK"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "v obchodě\\s+(?<value>.+?)\\."
+        },
+        {
+          "re": "od odesílatele\\s+(?<value>.+?)\\."
+        },
+        {
+          "re": "na účet\\s+(?<value>.+?)\\."
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["nová platba kartou", "odchozí", "výběr"],
+      "income": ["příchozí"]
+    },
+    "cardRules": {
+      "includeKeywords": ["platba kartou"],
+      "excludeKeywords": []
+    },
+    "cleaning": {
+      "minMerchantLength": 2
+    }
+  },
+  "fixtures": [
+    {
+      "name": "card payment at store",
+      "sender": "mBank CZ",
+      "receivedAt": "2026-06-01T09:15:00.000Z",
+      "body": "Nová platba kartou\n100,00 CZK v obchodě POTRAVINY OLOMOUC 9.Podívejte se, zda je všechno ok.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100",
+          "merchant": "POTRAVINY OLOMOUC 9",
+          "transactionType": "EXPENSE",
+          "isFromCard": true,
+          "currency": "CZK"
+        }
+      }
+    },
+    {
+      "name": "incoming transfer",
+      "sender": "mBank CZ",
+      "receivedAt": "2026-06-02T12:30:00.000Z",
+      "body": "Příchozí platba\n500,00 CZK od odesílatele JAN NOVAK. Podívejte se, zda je všechno ok.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500",
+          "merchant": "JAN NOVAK",
+          "transactionType": "INCOME",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "outgoing transfer to account",
+      "sender": "MBANK",
+      "receivedAt": "2026-06-03T17:45:00.000Z",
+      "body": "Odchozí platba\n250,00 CZK na účet 123456789/6700. Podívejte se, zda je všechno ok.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "250",
+          "merchant": "123456789/6700",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal reviews without merchant",
+      "sender": "mBank CZ",
+      "receivedAt": "2026-06-04T08:00:00.000Z",
+      "body": "Výběr z bankomatu\n2000,00 CZK. Podívejte se, zda je všechno ok.",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "2000",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "card confirmation code rejected",
+      "sender": "mBank CZ",
+      "receivedAt": "2026-06-05T10:00:00.000Z",
+      "body": "Váš autorizační kód pro platbu kartou je 123456. Nikomu ho nesdělujte.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

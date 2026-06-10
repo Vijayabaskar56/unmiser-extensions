@@ -1,0 +1,327 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro TelebirrParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/TelebirrParser.kt). Telebirr is Ethio telecom's ETB mobile-money wallet (sender \"127\"). Notable behaviors preserved from the Kotlin parser: - Savings flows are reversed relative to the saving account: a deposit TO the saving account leaves the wallet (EXPENSE); a withdraw FROM the saving account enters the wallet (INCOME). Modeled as pipeline setFieldWhen steps so they win over the received/paid/transferred typeRules, exactly like the Kotlin `when` ordering. - The Kotlin parser used the name after \"Dear\" as the account identifier (e.g. \"[Name]\"); the engine's accountLast4 is digits-only, so like other wallets the manifest routes to the \"0000\" wallet pseudo-account instead."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "et.telebirr.wallet",
+    "type": "sms-parser",
+    "name": "Telebirr",
+    "country": "ET",
+    "currency": "ETB",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["127"],
+      "dltPatterns": ["^[A-Z]{2}-127-[A-Z]$", "^127-[A-Z0-9]+$", "^[A-Z0-9]+-127$", "127"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment"
+      ],
+      "requireAnyKeyword": [
+        "dear",
+        "you have received",
+        "you have paid",
+        "you have transferred",
+        "current balance",
+        "e-money account balance",
+        "telebirr account balance",
+        "thank you for using telebirr",
+        "etb",
+        "transaction number",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "ETB\\s+(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s"
+        },
+        {
+          "re": "ETB\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)(?:\\s|$|\\.)"
+        },
+        {
+          "re": "(?:Credited|debited|transfered)\\s+(?:with\\s+)?ETB\\s+(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "deposited\\s+ETB\\s+[0-9,]+(?:\\.[0-9]{2})?\\s+to\\s+your\\s+(?<value>.+?)\\s+on\\s+\\d{2}/\\d{2}/\\d{4}"
+        },
+        {
+          "re": "withdraw(?:n)?\\s+ETB\\s+[0-9,]+(?:\\.[0-9]{2})?\\s+from\\s+your\\s+(?<value>.+?)\\s+on\\s+\\d{2}/\\d{2}/\\d{4}"
+        },
+        {
+          "re": "from\\s+(?<value>[A-Za-z\\s]+Bank)\\s+to\\s+your"
+        },
+        {
+          "re": "paid\\s+ETB\\s+[0-9,]+(?:\\.[0-9]{2})?\\s+to\\s+(?<value>[^,\\n]+?)(?=\\s+on\\s+\\d{2}/\\d{2}/\\d{4}|\\.\\s+Your\\s+transaction|$)"
+        },
+        {
+          "re": "(?<value>for\\s+fuel\\s+purchased\\s+from\\s+[^,\\n]+?)(?:\\s+on\\s+\\d{2}/\\d{2}/\\d{4}|\\.\\s+Your\\s+transaction|$)"
+        },
+        {
+          "re": "for\\s+goods\\s+purchased\\s+from\\s+(?<value>[^,\\n]+?)(?:\\s+on\\s+\\d{2}/\\d{2}/\\d{4}|\\.\\s+Your\\s+transaction|$)"
+        },
+        {
+          "re": "for\\s+package\\s+(?<value>[^,\\n]+?)(?:\\s+on\\s+\\d{2}/\\d{2}/\\d{4}|\\.\\s+Your\\s+transaction|$)"
+        },
+        {
+          "re": "transferred\\s+[^,\\n]+?\\s+to\\s+(?<value>[^,\\n]+?)(?:\\s+on\\s+\\d{2}/\\d{2}/\\d{4}|\\.|$)"
+        },
+        {
+          "re": "from\\s+(?!your\\s+account)(?<value>[^,\\n]+?)(?:\\s+on\\s+\\d{2}/\\d{2}/\\d{4}|\\s+to\\s+your|\\.|$)"
+        },
+        {
+          "re": "to\\s+(?<value>[^,\\n]+?)(?:\\s+on\\s+\\d{2}/\\d{2}/\\d{4}|\\.|$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "E-Money Account\\s+balance is ETB\\s+(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        },
+        {
+          "re": "current balance is ETB\\s+(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        },
+        {
+          "re": "telebirr account balance is\\s+ETB\\s+(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "bank transaction number is\\s+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "by transaction number\\s+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "(?:your\\s+)?transaction number is\\s+(?<value>[A-Z0-9]+)"
+        }
+      ]
+    },
+    "typeRules": {
+      "income": ["you have received"],
+      "expense": ["you have paid", "you have transferred"]
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["deposited etb", "to your saving account"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["withdraw etb", "from your saving account"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "accountLast4",
+        "value": "0000"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "received telebirr transaction",
+      "sender": "127",
+      "receivedAt": "2026-01-31T16:51:21.000Z",
+      "body": "Dear Name You have received ETB 1,000.00 from PERSON NME(2519****2078)  on 31/01/2026 16:51:21. Your transaction number is DAV4D0PVWS. Your current E-Money Account balance is ETB 9,719.23. Thank you for using telebirr Ethio telecom",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1000.00",
+          "merchant": "PERSON NME(2519****2078)",
+          "transactionType": "INCOME",
+          "balance": "9719.23",
+          "reference": "DAV4D0PVWS",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "bank transfer expense transaction",
+      "sender": "127",
+      "receivedAt": "2026-02-02T12:47:23.000Z",
+      "body": "Dear [Name] You have transferred ETB 600.00 successfully from your telebirr account 251955555559 to Commercial Bank of Ethiopia account number 1000111111115 on 02/02/2026 12:47:23. Your telebirr transaction number is DB26EO8R6W and your bank transaction number is FT2603327H99. The service fee is  ETB 5.22 and  15% VAT on the service fee is ETB 0.78. Your current balance is ETB 334.23. To download your payment information please click this link: https://transactioninfo.ethiotelecom.et/receipt/DB26EO8R6W Thank you for using telebirr Ethio telecom",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "600.00",
+          "merchant": "Commercial Bank of Ethiopia account number 1000111111115",
+          "transactionType": "EXPENSE",
+          "balance": "334.23",
+          "reference": "FT2603327H99",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "sent telebirr transaction",
+      "sender": "127",
+      "receivedAt": "2026-02-02T11:35:20.000Z",
+      "body": "Dear [Name] You have transferred ETB 775.00 to Person Name (2519****4211) on 02/02/2026 11:35:20. Your transaction number is DB25ELPHRL. The service fee is  ETB 3.48 and  15% VAT on the service fee is ETB 0.52. Your current E-Money Account  balance is ETB 8,940.23. To download your payment information please click this link: https://transactioninfo.ethiotelecom.et/receipt/DB25ELPHRL. Thank you for using telebirr Ethio telecom",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "775.00",
+          "merchant": "Person Name (2519****4211)",
+          "transactionType": "EXPENSE",
+          "balance": "8940.23",
+          "reference": "DB25ELPHRL",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "bank transfer income transaction",
+      "sender": "127",
+      "receivedAt": "2026-01-31T11:26:23.000Z",
+      "body": "Dear [Name], You have received  ETB 1,200.00 by transaction number DAV5COORPD on 2026-01-31 11:26:23 from Zemen Bank to your telebirr Account 251911111119 - [Name]. Your current balance is ETB 1,423.23. Thank you for using telebirr Ethio telecom",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1200.00",
+          "merchant": "Zemen Bank",
+          "transactionType": "INCOME",
+          "balance": "1423.23",
+          "reference": "DAV5COORPD",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "government payment expense transaction",
+      "sender": "127",
+      "receivedAt": "2026-02-03T13:47:22.000Z",
+      "body": "Dear [Name] You have paid ETB 1,080.00 to 519680 - City Government of Adis Ababa Driver and Vehicle Licensing and Control Authority Drivers Bole Branch; for Driver Service Payment with payment order 2934245 on 03/02/2026 13:47:22. The service fee is  ETB 5.40 and  15% VAT on the service fee is ETB 0.81. Your transaction number is DB37FSJ0PP Your telebirr account balance is  ETB 496.04.To download your payment information please click this link: https://transactioninfo.ethiotelecom.et/receipt/DB37FSJ0PP  Thank you for using telebirr   Ethio telecom",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1080.00",
+          "merchant": "519680 - City Government of Adis Ababa Driver and Vehicle Licensing and Control Authority Drivers Bole Branch; for Driver Service Payment with payment order 2934245",
+          "transactionType": "EXPENSE",
+          "balance": "496.04",
+          "reference": "DB37FSJ0PP",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "merchant payment expense transaction",
+      "sender": "127",
+      "receivedAt": "2026-01-16T16:47:34.000Z",
+      "body": "Dear [Name] You have paid ETB 1,569.99 for goods purchased from 521902 - SAMUEL STEPHANET Gateau ECA Branch on 16/01/2026 16:47:34. Your transaction number is  DAG2V7537E. Your current balance is ETB 6,512.23. To download your payment information please click this link: https://transactioninfo.ethiotelecom.et/receipt/DAG2V7537E Thank you for using telebirr Ethio telecom",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1569.99",
+          "merchant": "521902 - SAMUEL STEPHANET Gateau ECA Branch",
+          "transactionType": "EXPENSE",
+          "balance": "6512.23",
+          "reference": "DAG2V7537E",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "airtime package payment expense transaction",
+      "sender": "127",
+      "receivedAt": "2026-02-05T13:36:33.000Z",
+      "body": "Dear [Name] You have paid ETB 875.00 for package Monthly 240Min + 24GB Data purchase made for 911111119 on 05/02/2026 13:36:33. Your transaction number is  DB59HV01HN. Your current balance is ETB 41.23.To download your payment information please click this link: https://transactioninfo.ethiotelecom.et/receipt/DB59HV01HN Thank you for using telebirr Ethio telecom",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "875.00",
+          "merchant": "Monthly 240Min + 24GB Data purchase made for 911111119",
+          "transactionType": "EXPENSE",
+          "balance": "41.23",
+          "reference": "DB59HV01HN",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "savings deposit expense transaction",
+      "sender": "127",
+      "receivedAt": "2026-01-31T12:05:27.000Z",
+      "body": "Dear [Name] You have successfully deposited ETB 10000.00 to your Saving Account on 31/01/2026 12:05:27. Your telebirr transaction number is DAV0CQ2NFC. Your current Saving balance is ETB 12050.63 and Your current telebirr Account balance is ETB 82.25. Thank you for using telebirr Ethio telecom",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "10000.00",
+          "merchant": "Saving Account",
+          "transactionType": "EXPENSE",
+          "balance": "82.25",
+          "reference": "DAV0CQ2NFC",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "savings withdraw income transaction",
+      "sender": "127",
+      "receivedAt": "2026-02-06T10:19:02.000Z",
+      "body": "Dear [Name], You have successfully Withdraw ETB 1800.00 from your saving account on 06/02/2026 10:19:02. Your transaction number is DB69IPQY2T. Your current saving balance is ETB 6110.00 and Your current e-money account balance is ETB 1,841.23. Thank you for using telebirr Ethio telecom",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1800.00",
+          "merchant": "saving account",
+          "transactionType": "INCOME",
+          "balance": "1841.23",
+          "reference": "DB69IPQY2T",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "fuel payment expense transaction",
+      "sender": "127",
+      "receivedAt": "2026-03-17T08:20:45.000Z",
+      "body": "Dear NAME You have paid ETB 2,560.00 for fuel purchased from 555552 - JOHN SMITH NAME for plate number  3AA33 on 17/03/2026 08:20:45. Your transaction number is  DCH7UPHXGG. Your current balance is ETB 112.52. To download your payment information please click this link: https://transactioninfo.ethiotelecom.et/receipt/DCH7UPHXGG You can also use telebirr to pay traffic fines, electricity, water, DSTV, CANAL+ and other payments. Thank you for using telebirr Ethio telecom",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2560.00",
+          "merchant": "for fuel purchased from 555552 - JOHN SMITH NAME for plate number 3AA33",
+          "transactionType": "EXPENSE",
+          "balance": "112.52",
+          "reference": "DCH7UPHXGG",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "127",
+      "receivedAt": "2026-02-10T09:00:00.000Z",
+      "body": "Dear customer, your telebirr OTP is 123456. Do not share this code with anyone. Thank you for using telebirr Ethio telecom",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

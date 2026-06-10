@@ -1,0 +1,462 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro BankOfBarodaParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/BankOfBarodaParser.kt) plus the BankParser.kt base-class fallbacks it relies on. Formats covered: \"Rs.X transferred from A/c ...NNNN to:NAME\", \"Rs.X Dr. from A/c XXNNNNNN\", \"Rs.X Cr. to vpa@bank\" (UPI), \"credited to A/c ... via IMPS/NNN by NAME\", \"Rs.X deposited in cash\", \"credited with INR X\", \"Rs.X Credited to A/c\", and the BOBCARD credit-card \"ALERT: INR X is spent\" alerts."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.bob.bank",
+    "type": "sms-parser",
+    "name": "Bank of Baroda",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["BOB", "BANKOFBARODA", "BOBSMS", "BOBTXN", "BOBCRD"],
+      "dltPatterns": ["BOB", "BARODA"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "dr. from",
+        "cr. to",
+        "credited to a/c",
+        "credited with inr",
+        "deposited in cash",
+        "transferred from",
+        "is spent",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "ALERT:\\s*INR\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)\\s+is\\s+spent"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)\\s+transferred\\s+from"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)\\s+Dr\\.?\\s+from"
+        },
+        {
+          "re": "credited\\s+with\\s+INR\\s+(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)\\s+Credited\\s+to"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)\\s+.*?Cr\\.?\\s+to"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)\\s+deposited\\s+in\\s+cash"
+        },
+        {
+          "re": "(?:INR|Rs)\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "transferred\\s+from\\s+A/c\\s+\\S+\\s+to:\\s*(?<value>[^.]+?)(?:\\.|$)"
+        },
+        {
+          "re": "Cr\\.?\\s+to\\s+(?<value>[^\\s@]+)@[^\\s.]+"
+        },
+        {
+          "re": "IMPS/\\d+\\s+by\\s+(?<value>[^.]+?)(?:\\s*\\.|$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "AvlBal:\\s*Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Total\\s+Bal:\\s*Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avlbl\\s+Amt:\\s*Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:avl|available)\\s*bal(?:ance)?\\s*:?\\s*(?:rs\\.?|inr)?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "Ref:\\s*(?<value>\\d+)"
+        },
+        {
+          "re": "UPI\\s+Ref\\s+No\\s+(?<value>\\d+)"
+        },
+        {
+          "re": "IMPS/(?<value>\\d+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "BOBCARD\\s+ending\\s+(?<value>\\d{4})"
+        },
+        {
+          "re": "A/C\\s+X*(?<value>\\d{6})",
+          "takeLast4": true
+        },
+        {
+          "re": "A/c\\s+\\.+(?<value>\\d{4})"
+        },
+        {
+          "re": "(?:a/c|account|acct)\\.?\\s*(?:no\\.?)?\\s*[xX*]*(?<value>\\d{3,6})",
+          "takeLast4": true
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "Available\\s+credit\\s+limit\\s+is\\s+Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+limit:?\\s*Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avl\\s+Lmt:?\\s*Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avail\\s+Limit:?\\s*Rs\\.?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "indian clearing corporation",
+        "nsccl",
+        "nse clearing",
+        "clearing corporation",
+        "nach",
+        "ecs",
+        "groww",
+        "zerodha",
+        "upstox",
+        "kuvera",
+        "paytm money",
+        "etmoney",
+        "smallcase",
+        "angel one",
+        "angel broking",
+        "5paisa",
+        "icici securities",
+        "hdfc securities",
+        "kotak securities",
+        "motilal oswal",
+        "sharekhan",
+        "edelweiss",
+        "axis direct",
+        "sbi securities",
+        "mutual fund",
+        "sip",
+        "elss",
+        "demat",
+        "stockbroker",
+        "digital gold",
+        "sovereign gold",
+        "cdsl",
+        "nsdl"
+      ],
+      "credit": ["spent on your bobcard"],
+      "expense": [
+        "transferred from",
+        "dr.",
+        "debited",
+        "withdrawn",
+        "spent",
+        "charged",
+        "paid",
+        "deducted"
+      ],
+      "income": ["cr.", "credited", "deposited", "received", "refund"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\([^)]*\\)\\s*$",
+        "\\s+Total\\s+Bal.*$",
+        "\\s+PVT\\.?\\s+LTD\\.?$",
+        "\\s+LTD\\.?$",
+        "[\\s-]+$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["redacted@"]
+        },
+        "field": "merchant",
+        "value": "UPI Payment"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["deposited in cash"]
+        },
+        "field": "merchant",
+        "value": "Cash Deposit"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["upi", "credited"],
+          "notContainsAny": ["@", "transferred from", "imps/"]
+        },
+        "field": "merchant",
+        "value": "UPI Credit"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["upi", "dr."],
+          "notContainsAny": ["@", "transferred from"]
+        },
+        "field": "merchant",
+        "value": "UPI Payment"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["imps"],
+          "notContainsAny": ["@", " by ", "transferred from"]
+        },
+        "field": "merchant",
+        "value": "IMPS Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["bobcard", "spent"]
+        },
+        "field": "transactionType",
+        "value": "CREDIT"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "account transfer to loan recovery",
+      "sender": "VM-BOBTXN-S",
+      "receivedAt": "2025-11-04T04:03:09.000Z",
+      "body": "Rs.29 transferred from A/c ...5494 to:Loan Recovery Fo. Total Bal:Rs.24898.57CR. Avlbl Amt:Rs.24898.57(04-11-2025 04:03:09) - Bank of Baroda",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "29",
+          "merchant": "Loan Recovery Fo",
+          "accountLast4": "5494",
+          "balance": "24898.57",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "account transfer to individual",
+      "sender": "VM-BOBTXN-S",
+      "receivedAt": "2025-11-10T10:30:00.000Z",
+      "body": "Rs.1500.00 transferred from A/c ...1234 to:John Smith. Total Bal:Rs.15000.00CR. Avlbl Amt:Rs.15000.00(10-11-2025 10:30:00) - Bank of Baroda",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1500.00",
+          "merchant": "John Smith",
+          "accountLast4": "1234",
+          "balance": "15000.00",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "debit from account",
+      "sender": "VM-BOBTXN",
+      "receivedAt": "2024-11-12T09:00:00.000Z",
+      "body": "Rs.80.00 Dr. from A/c XX123456 on 12-11-2024. AvlBal:Rs1234.56cx. Ref:52211012345 -Bank of Baroda",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "80.00",
+          "accountLast4": "3456",
+          "balance": "1234.56",
+          "reference": "52211012345",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "upi credit to account with redacted vpa",
+      "sender": "VM-BOBSMS",
+      "receivedAt": "2024-11-15T12:00:00.000Z",
+      "body": "Rs.500.00 Cr. to redacted@ybl A/c XX789012 on 15-11-2024. AvlBal:Rs5678.90. Ref:987654321 -Bank of Baroda",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "UPI Payment",
+          "accountLast4": "9012",
+          "balance": "5678.90",
+          "reference": "987654321",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "upi credit with real vpa",
+      "sender": "VM-BOBSMS",
+      "receivedAt": "2024-11-16T12:00:00.000Z",
+      "body": "Rs.1000.00 Cr. to merchant@okaxis A/c XX345678 on 16-11-2024. AvlBal:Rs10000.00. Ref:1234567890 -Bank of Baroda",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1000.00",
+          "merchant": "merchant",
+          "accountLast4": "5678",
+          "balance": "10000.00",
+          "reference": "1234567890",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "imps transfer by person",
+      "sender": "VM-BOBTXN-S",
+      "receivedAt": "2024-11-18T12:00:00.000Z",
+      "body": "Rs.2500.00 credited to A/c XX456789 via IMPS/518233445566 by JOHN DOE. AvlBal:Rs25000.00 -Bank of Baroda",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2500.00",
+          "merchant": "JOHN DOE",
+          "accountLast4": "6789",
+          "balance": "25000.00",
+          "reference": "518233445566",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "cash deposit to account",
+      "sender": "VM-BOBSMS",
+      "receivedAt": "2024-11-20T12:00:00.000Z",
+      "body": "Rs.10000.00 deposited in cash to A/c XX234567 on 20-11-2024. AvlBal:Rs45000.00 -Bank of Baroda",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "10000.00",
+          "merchant": "Cash Deposit",
+          "accountLast4": "4567",
+          "balance": "45000.00",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "bobcard credit card purchase with available limit",
+      "sender": "VM-BOBCRD-S",
+      "receivedAt": "2024-11-25T10:30:00.000Z",
+      "body": "ALERT: INR 1,500.00 is spent on your BOBCARD ending 1234 at AMAZON on 25-11-2024 10:30:00. Available credit limit is Rs 42,981.46 -Bank of Baroda",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "1500.00",
+          "accountLast4": "1234",
+          "creditLimit": "42981.46",
+          "transactionType": "CREDIT",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "bobcard spent pattern without is",
+      "sender": "VM-BOBCRD-S",
+      "receivedAt": "2024-11-26T12:00:00.000Z",
+      "body": "ALERT: INR 250.50 spent on your BOBCARD ending 5678 at SWIGGY on 26-11-2024. -Bank of Baroda",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "250.50",
+          "accountLast4": "5678",
+          "transactionType": "CREDIT",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "account credited with inr",
+      "sender": "VM-BOBSMS",
+      "receivedAt": "2024-11-30T12:00:00.000Z",
+      "body": "Your A/c XX987654 is credited with INR 70.00 on 30-11-2024. Total Bal:Rs.5000.00 -Bank of Baroda",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "70.00",
+          "accountLast4": "7654",
+          "balance": "5000.00",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "amount credited to account",
+      "sender": "VM-BOBTXN",
+      "receivedAt": "2024-12-01T12:00:00.000Z",
+      "body": "Rs.5000.00 Credited to A/c XX112233 on 01-12-2024. AvlBal:Rs12345.67 -Bank of Baroda",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "5000.00",
+          "accountLast4": "2233",
+          "balance": "12345.67",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "VM-BOBSMS",
+      "receivedAt": "2024-12-02T12:00:00.000Z",
+      "body": "Your OTP for txn of Rs.4999.00 at AMAZON is 482913. Do not share it with anyone -Bank of Baroda",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

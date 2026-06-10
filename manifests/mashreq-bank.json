@@ -1,0 +1,348 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro MashreqBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/MashreqBankParser.kt). Mashreq Bank (UAE, AED) — NEO VISA debit card purchases with the \"Thank you for using NEO VISA Debit Card Card ending XXXX for AED 5.99 at CARREFOUR on 26-AUG-2025 10:25 PM. Available Balance is AED X,480.15\" format. Mashreq masks the thousands digit(s) of the balance with 'X'; the Kotlin parser replaced X with 0 (\"0480.15\") — here the regex skips the masked prefix instead, yielding the numerically equal \"480.15\". The Kotlin parser also extracted a per-message currency (USD/EUR card purchases abroad); the manifest engine has a fixed manifest currency, so foreign-currency purchases report AED (deviation noted in fixtures)."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "ae.mashreq.bank",
+    "type": "sms-parser",
+    "name": "Mashreq Bank",
+    "country": "AE",
+    "currency": "AED",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["MASHREQ", "MSHREQ"],
+      "dltPatterns": ["^.*MASHREQ.*$", "^[A-Z]{2}-MSHREQ-[A-Z]$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "do not share",
+        "activation",
+        "has been blocked",
+        "has been activated",
+        "card request",
+        "card application",
+        "limit change",
+        "pin change",
+        "failed transaction",
+        "transaction declined",
+        "insufficient balance"
+      ],
+      "requireAnyKeyword": [
+        "thank you for using",
+        "neo visa debit card",
+        "neo debit card",
+        "debit card card ending",
+        "credit card card ending",
+        "available balance is",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "for\\s+(?!(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\\s)[A-Z]{3}\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "of\\s+(?!(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\\s)[A-Z]{3}\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "\\b(?!(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\\s)[A-Z]{3}\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "at\\s+(?<value>[^,\\n]+?)\\s+on\\s+\\d{1,2}-[A-Z]{3}-\\d{4}"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Available Balance is\\s+[A-Z]{3}\\s+[Xx]*,?(?<value>[0-9][0-9,]*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avl\\.?\\s*Bal\\.?\\s+[A-Z]{3}\\s+[Xx]*,?(?<value>[0-9][0-9,]*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Balance:?\\s+[A-Z]{3}\\s+[Xx]*,?(?<value>[0-9][0-9,]*(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "on\\s+(?<value>\\d{1,2}-[A-Z]{3}-\\d{4}\\s+\\d{1,2}:\\d{2}\\s+[AP]M)"
+        },
+        {
+          "re": "(?<value>\\d{1,2}-[A-Z]{3}-\\d{4}\\s+\\d{1,2}:\\d{2}\\s+[AP]M)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "Card ending\\s+(?<value>[Xx\\d]{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "card\\s+(?:no\\.|number)\\s+(?<value>[Xx\\d]{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "account\\s+(?:no\\.|number)?\\s*(?<value>[Xx\\d]{4})",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": ["mutual fund", "sip", "demat", "ipo", "digital gold"],
+      "expense": ["withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["deposited", "received", "refund"]
+    },
+    "cardRules": {
+      "includeKeywords": [
+        "neo visa debit card",
+        "neo debit card",
+        "debit card card ending",
+        "credit card card ending",
+        "card ending",
+        "mashreq card",
+        "debit card",
+        "credit card",
+        "card no.",
+        "card number"
+      ],
+      "excludeKeywords": []
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["debited"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credited"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["transfer"]
+        },
+        "field": "transactionType",
+        "value": "TRANSFER"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["atm", "deposited"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["atm", "withdrawn"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["credit card", "for "]
+        },
+        "field": "transactionType",
+        "value": "CREDIT"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["debit card", "for "]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["transfer"],
+          "notContainsAny": ["debit card", "credit card", "atm"]
+        },
+        "field": "merchant",
+        "value": "Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["atm", "withdrawn"],
+          "notContainsAny": ["debit card", "credit card"]
+        },
+        "field": "merchant",
+        "value": "ATM Withdrawal"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "NEO VISA debit card purchase with fully masked card (user example)",
+      "sender": "Mashreq",
+      "receivedAt": "2025-08-26T22:25:00.000Z",
+      "body": "Thank you for using NEO VISA Debit Card Card ending XXXX for AED 5.99 at CARREFOUR on 26-AUG-2025 10:25 PM. Available Balance is AED X,480.15",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5.99",
+          "transactionType": "EXPENSE",
+          "merchant": "CARREFOUR",
+          "balance": "480.15",
+          "reference": "26-AUG-2025 10:25 PM",
+          "isFromCard": true,
+          "currency": "AED"
+        }
+      }
+    },
+    {
+      "name": "debit card purchase with visible card digits",
+      "sender": "Mashreq",
+      "receivedAt": "2025-01-15T15:45:00.000Z",
+      "body": "Thank you for using NEO VISA Debit Card Card ending 1234 for AED 125.50 at DUBAI MALL on 15-JAN-2025 3:45 PM. Available Balance is AED 3,250.75",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "125.50",
+          "transactionType": "EXPENSE",
+          "merchant": "DUBAI MALL",
+          "accountLast4": "1234",
+          "balance": "3250.75",
+          "reference": "15-JAN-2025 3:45 PM",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "foreign currency purchase (USD) — engine keeps manifest currency AED",
+      "sender": "Mashreq",
+      "receivedAt": "2025-02-20T11:30:00.000Z",
+      "body": "Thank you for using NEO VISA Debit Card Card ending 5678 for USD 89.99 at AMAZON on 20-FEB-2025 11:30 AM. Available Balance is AED 2,500.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "89.99",
+          "transactionType": "EXPENSE",
+          "merchant": "AMAZON",
+          "accountLast4": "5678",
+          "balance": "2500.00",
+          "reference": "20-FEB-2025 11:30 AM",
+          "currency": "AED"
+        }
+      }
+    },
+    {
+      "name": "large amount with comma formatting",
+      "sender": "Mashreq",
+      "receivedAt": "2025-03-10T17:15:00.000Z",
+      "body": "Thank you for using NEO VISA Debit Card Card ending 9876 for AED 1,250.00 at ELECTRONICS STORE on 10-MAR-2025 5:15 PM. Available Balance is AED 8,750.50",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1250.00",
+          "transactionType": "EXPENSE",
+          "merchant": "ELECTRONICS STORE",
+          "accountLast4": "9876",
+          "balance": "8750.50",
+          "reference": "10-MAR-2025 5:15 PM"
+        }
+      }
+    },
+    {
+      "name": "balance with X-masked thousands",
+      "sender": "Mashreq",
+      "receivedAt": "2025-04-05T08:20:00.000Z",
+      "body": "Thank you for using NEO VISA Debit Card Card ending 4321 for AED 45.00 at COFFEE SHOP on 05-APR-2025 8:20 AM. Available Balance is AED X,123.45",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "45.00",
+          "transactionType": "EXPENSE",
+          "merchant": "COFFEE SHOP",
+          "accountLast4": "4321",
+          "balance": "123.45",
+          "reference": "05-APR-2025 8:20 AM"
+        }
+      }
+    },
+    {
+      "name": "foreign currency purchase (EUR) via DLT-style sender",
+      "sender": "AE-MASHREQ-B",
+      "receivedAt": "2025-05-12T14:30:00.000Z",
+      "body": "Thank you for using NEO VISA Debit Card Card ending 7890 for EUR 150.00 at PARIS STORE on 12-MAY-2025 2:30 PM. Available Balance is AED 4,500.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "150.00",
+          "transactionType": "EXPENSE",
+          "merchant": "PARIS STORE",
+          "accountLast4": "7890",
+          "balance": "4500.00",
+          "reference": "12-MAY-2025 2:30 PM"
+        }
+      }
+    },
+    {
+      "name": "OTP message is rejected",
+      "sender": "Mashreq",
+      "receivedAt": "2025-01-10T10:00:00.000Z",
+      "body": "Your OTP for Mashreq transaction is 123456. Do not share with anyone. Valid for 5 minutes.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "card activation notice is rejected",
+      "sender": "Mashreq",
+      "receivedAt": "2025-01-11T10:00:00.000Z",
+      "body": "Your Mashreq NEO card has been activated successfully. Thank you for banking with us.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "declined transaction is rejected",
+      "sender": "Mashreq",
+      "receivedAt": "2025-01-12T10:00:00.000Z",
+      "body": "Your transaction for AED 500.00 has been declined due to insufficient balance. Please contact customer service.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "PIN change notification is rejected",
+      "sender": "Mashreq",
+      "receivedAt": "2025-01-15T10:00:00.000Z",
+      "body": "Your Mashreq card PIN has been changed successfully on 15-JAN-2025. If you did not initiate this, please contact us.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

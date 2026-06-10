@@ -1,0 +1,223 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro CIMBThaiParser.kt + BaseThailandBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/). The CIMB Thai parser itself only defines canHandle (\"CIMB\" exact, contains \"CIMB THAI\" or \"CIMBTHAI\") and getBankName — all extraction and classification behavior comes from BaseThailandBankParser (THB amounts in Thai/English, \"Bal/คงเหลือ\" balances, \"A/C|บช xNNNN\" accounts, \"at|ร้าน\" merchants, Thai+English type keywords) plus the BankParser base fallbacks (CompiledPatterns Account/Reference). The first fixture body is verbatim from ThailandBankParsersTest.kt (\"cimb thai parser handles key paths\")."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "th.cimb.bank",
+    "type": "sms-parser",
+    "name": "CIMB Thai",
+    "country": "TH",
+    "currency": "THB",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["CIMB"],
+      "dltPatterns": ["^.*CIMB\\s?THAI.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "รหัส",
+        "ยืนยัน",
+        "สมัคร",
+        "โปรโมชั่น",
+        "promotion",
+        "cashback offer"
+      ],
+      "requireAnyKeyword": [
+        "เงินเข้า",
+        "เงินออก",
+        "ถอนเงิน",
+        "โอนเงิน",
+        "ใช้จ่าย",
+        "เงินฝาก",
+        "รับเงิน",
+        "คงเหลือ",
+        "บาท",
+        "ยอดใช้จ่าย",
+        "withdrawal",
+        "deposit",
+        "transfer",
+        "payment",
+        "spent",
+        "receive",
+        "bal",
+        "thb",
+        "card transaction",
+        "card payment",
+        "credit card spending",
+        "available limit"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:THB|฿)\\s*(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*USD"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "(?:at|ร้าน)\\s+(?<value>[A-Za-z0-9\\s&._-]+?)(?:\\s+(?:A/C|บช|Bal|คงเหลือ|Available|on|$))"
+        },
+        {
+          "re": "at\\s+(?<value>[A-Za-z0-9\\s&._-]+)$"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]+)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]+)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/C|บช)\\s*x(?<value>\\d{4})"
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "(?:Available limit|วงเงินคงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": ["clearing corporation", "mutual fund", "sip purchase"],
+      "credit": ["credit card spending", "ยอดใช้จ่ายต่างประเทศ", "ยอดใช้จ่าย"],
+      "expense": [
+        "เงินออก",
+        "ถอนเงิน",
+        "ถอนเงินสด",
+        "โอนเงินออก",
+        "โอนเงินผ่าน",
+        "ใช้จ่ายบัตร",
+        "ใช้จ่าย",
+        "withdrawal",
+        "payment",
+        "you spent",
+        "transfer out",
+        "card payment",
+        "card transaction",
+        "atm withdrawal"
+      ],
+      "income": [
+        "เงินเข้า",
+        "เงินฝาก",
+        "รับเงิน",
+        "โอนเงินเข้า",
+        "รับเงินพร้อมเพย์",
+        "รับเงินโอน",
+        "เงินฝากเข้า",
+        "deposit",
+        "receive",
+        "transfer in",
+        "transfer received"
+      ]
+    },
+    "cleaning": {
+      "minMerchantLength": 2,
+      "commonWords": ["ผ่าน", "โดย", "จาก", "ที่", "ไปยัง", "ถึง"]
+    }
+  },
+  "fixtures": [
+    {
+      "name": "CIMB transfer received (English)",
+      "sender": "CIMB",
+      "receivedAt": "2026-01-21T14:32:00.000Z",
+      "body": "CIMB: Transfer received 6,000.00 THB A/C x5566 Bal 14,980.00 THB",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "6000.00",
+          "transactionType": "INCOME",
+          "accountLast4": "5566",
+          "balance": "14980.00"
+        }
+      }
+    },
+    {
+      "name": "CIMB ATM withdrawal (English, synthesized)",
+      "sender": "CIMB",
+      "receivedAt": "2026-01-22T09:15:00.000Z",
+      "body": "CIMB: ATM Withdrawal 2,000.00 THB A/C x5566 Bal 12,980.00 THB",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "2000.00",
+          "transactionType": "EXPENSE",
+          "accountLast4": "5566",
+          "balance": "12980.00"
+        }
+      }
+    },
+    {
+      "name": "CIMB transfer out (Thai, synthesized)",
+      "sender": "CIMB THAI",
+      "receivedAt": "2026-01-23T11:05:00.000Z",
+      "body": "CIMB: โอนเงินออก 1,500.00 บาท บช x5566 คงเหลือ 11,480.00 บาท",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "1500.00",
+          "transactionType": "EXPENSE",
+          "accountLast4": "5566",
+          "balance": "11480.00"
+        }
+      }
+    },
+    {
+      "name": "CIMB credit card spending with merchant (synthesized)",
+      "sender": "CIMBTHAI",
+      "receivedAt": "2026-01-24T18:40:00.000Z",
+      "body": "CIMB: Credit card spending 3,500.00 THB Card x9012 at CENTRAL WORLD on 24/01/26 18:40 Available limit 46,500.00 THB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "3500.00",
+          "transactionType": "CREDIT",
+          "merchant": "CENTRAL WORLD",
+          "accountLast4": "9012",
+          "creditLimit": "46500.00"
+        }
+      }
+    },
+    {
+      "name": "OTP message is filter-rejected",
+      "sender": "CIMB",
+      "receivedAt": "2026-01-25T10:00:00.000Z",
+      "body": "CIMB: รหัส OTP ของคุณคือ 123456 ใช้ภายใน 5 นาที ห้ามบอกรหัสนี้แก่ผู้อื่น",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

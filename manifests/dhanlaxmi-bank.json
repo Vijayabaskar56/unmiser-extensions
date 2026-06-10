@@ -1,0 +1,290 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro DhanlaxmiBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/DhanlaxmiBankParser.kt). Supported formats: - UPI debits: \"INR 20.00 is debited from A/c XXXX1234 on 28-NOV-2025 - \\\"UPI TXN: ...\\\"\" - UPI credits: \"INR 10.00 is credited to A/c XXXX1234 on 24-APR-2025 - \\\"UPI TXN: ...\\\"\" - Internal transfers: \"Your a/c no. XXXXXXXX1234 is credited for Rs.10.00 on 24-04-25...\" Sender patterns: TL-DHANBK-S, VM-DHANBK, DHANBK, DHANLAXMI, etc."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.dhanlaxmi.bank",
+    "type": "sms-parser",
+    "name": "Dhanlaxmi Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["DHANBK", "DHANLAXMI", "TL-DHANBK-S", "VM-DHANBK"],
+      "dltPatterns": ["^.*DHANBK.*$", "^.*DHANLAXMI.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "is debited from",
+        "is credited to",
+        "credited for",
+        "debited from a/c",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+is\\s+(?:debited|credited)"
+        },
+        {
+          "re": "(?:credited|debited)\\s+for\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "Payment\\s+from\\s+(?<value>[^/\"]+)"
+        },
+        {
+          "re": "payment\\s+on\\s+(?<value>\\w+)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Aval\\s+Bal\\s+is\\s+INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Avl|Available)\\s+Bal(?:ance)?\\s*:?\\s*(?:Rs\\.?|INR)?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "UPI\\s+Ref\\s+no\\s+(?<value>\\d+)"
+        },
+        {
+          "re": "UPI\\s+TXN:\\s*/(?<value>\\d+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "A/c\\s+X+(?<value>\\d{4})"
+        },
+        {
+          "re": "a/c\\s+no\\.\\s*X+(?<value>\\d{4})"
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "nsccl",
+        "clearing corporation",
+        "groww",
+        "zerodha",
+        "upstox",
+        "mutual fund",
+        "sip",
+        "demat"
+      ],
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["credited", "deposited", "received", "refund"]
+    },
+    "cleaning": {
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credited to", "credited for"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["debited from"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["is credited"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["is debited"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["debited from a/c", "credited"],
+          "notContainsAny": ["upi txn"]
+        },
+        "field": "merchant",
+        "value": "Internal Transfer"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "merchant",
+        "value": "UPI Payment"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "upi debit transaction",
+      "sender": "TL-DHANBK-S",
+      "receivedAt": "2025-11-28T10:15:00.000Z",
+      "body": "INR 20.00 is debited from A/c XXXX1234 on 28-NOV-2025 - \"UPI TXN: /675325120952-MR /Payment from PhonePe/Q12345444@ybl/YESB0YBLUPI/4172120251128000100004392\". Aval Bal is INR 26,578.49. If not transacted call 044-42413000.-DhanlaxmiBank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "20.00",
+          "transactionType": "EXPENSE",
+          "merchant": "PhonePe",
+          "accountLast4": "1234",
+          "balance": "26578.49",
+          "reference": "675325120952",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "upi credit transaction",
+      "sender": "VM-DHANBK",
+      "receivedAt": "2025-04-24T09:00:00.000Z",
+      "body": "INR 10.00 is credited to A/c XXXX1234 on 24-APR-2025 - \"UPI TXN: /398353431145-Paytm/payment on Myntra using UPI on Mar 25 2025/one97987¡axisbank/911188478932/41721202504240001\". Aval Bal is INR 36,278.92 -DhanlaxmiBank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "10.00",
+          "transactionType": "INCOME",
+          "merchant": "Myntra",
+          "accountLast4": "1234",
+          "balance": "36278.92",
+          "reference": "398353431145",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "internal transfer credit",
+      "sender": "VM-DHANBK",
+      "receivedAt": "2025-04-24T11:30:00.000Z",
+      "body": "Your a/c no. XXXXXXXX1234 is credited for Rs.10.00 on 24-04-25 and debited from a/c no. XXXXXXXX0987 (UPI Ref no 398353431145).-DhanlaxmiBank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "10.00",
+          "transactionType": "INCOME",
+          "merchant": "Internal Transfer",
+          "accountLast4": "1234",
+          "reference": "398353431145",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "large amount debit",
+      "sender": "TL-DHANBK-S",
+      "receivedAt": "2025-12-15T16:45:00.000Z",
+      "body": "INR 50,000.00 is debited from A/c XXXX5678 on 15-DEC-2025 - \"UPI TXN: /123456789012-MR /Payment from GPay\". Aval Bal is INR 1,25,000.50. If not transacted call 044-42413000.-DhanlaxmiBank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "50000.00",
+          "transactionType": "EXPENSE",
+          "merchant": "GPay",
+          "accountLast4": "5678",
+          "balance": "125000.50",
+          "reference": "123456789012",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "upi credit simple merchant",
+      "sender": "VM-DHANBK",
+      "receivedAt": "2026-01-01T08:00:00.000Z",
+      "body": "INR 500.00 is credited to A/c XXXX9999 on 01-JAN-2026 - \"UPI TXN: /111222333444-Salary/Payment from Employer\". Aval Bal is INR 75,500.00 -DhanlaxmiBank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "transactionType": "INCOME",
+          "merchant": "Employer",
+          "accountLast4": "9999",
+          "balance": "75500.00",
+          "reference": "111222333444",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "VM-DHANBK",
+      "receivedAt": "2025-11-28T10:00:00.000Z",
+      "body": "Your Dhanlaxmi Bank OTP is 123456. Do not share this code with anyone. Valid for 5 minutes.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "promotional message is filter-rejected",
+      "sender": "VM-DHANBK",
+      "receivedAt": "2025-11-01T12:00:00.000Z",
+      "body": "Dhanlaxmi Bank: Get 5% cashback on all UPI transactions this festive season!",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "balance inquiry is filter-rejected",
+      "sender": "VM-DHANBK",
+      "receivedAt": "2025-11-28T18:00:00.000Z",
+      "body": "Your Dhanlaxmi Bank account balance is INR 50,000.00 as of 28-NOV-2025.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

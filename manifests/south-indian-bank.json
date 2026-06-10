@@ -1,0 +1,248 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro SouthIndianBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/SouthIndianBankParser.kt). Covers the SIB IMPS credit narrative (\"Info: IMPS/FDRL/ref/MERCHANT.\"), the \"UPI debit:Rs.X A/c X1234 ... RRN: ... Bal:Rs.Y\" format, and the debit-card ledger line (\"A/c X1234 DEBIT:Rs.X MERCHANT Bal:Rs.Y\"). The Kotlin parser's \"UPI Credit\"/\"UPI Transaction\" merchant defaults are reproduced as pipeline setFieldWhen steps gated on the absence of \"Info:\" / \"@\" (the two cases where a real merchant is extractable from a UPI message)."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.sib.bank",
+    "type": "sms-parser",
+    "name": "South Indian Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": [
+        "SIBSMS",
+        "AD-SIBSMS",
+        "CP-SIBSMS",
+        "SIBSMS-S",
+        "AD-SIBSMS-S",
+        "CP-SIBSMS-S",
+        "SOUTHINDIANBANK",
+        "SIBBANK"
+      ],
+      "dltPatterns": [".*SIBSMS.*", ".*SIBBANK.*", "^AD-SIB.*$", "^CP-SIB.*$", "^VM-SIB.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "is scheduled on"
+      ],
+      "requireAnyKeyword": [
+        "debit",
+        "credit",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid",
+        "purchase",
+        "refund",
+        "cashback",
+        "upi"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "Info:\\s*IMPS/[^/]+/[^/]+/(?<value>[^.]+)"
+        },
+        {
+          "re": "Info:UPI/[^/]+/[^/]+/(?<value>[^/]+?)\\s+on"
+        },
+        {
+          "re": "\\bto\\s+(?<value>[^,\\s]+@[^\\s,]+)"
+        },
+        {
+          "re": "\\bfrom\\s+(?<value>[^,\\s]+@[^\\s,]+)"
+        },
+        {
+          "re": "(?:DEBIT|CREDIT)[:\\s]*Rs\\.?\\s*[0-9,]+(?:\\.\\d{2})?\\s+(?<value>[A-Z\\s]+?)\\s+(?:Bal|Available)"
+        },
+        {
+          "re": "\\b(?<value>ATM)\\b"
+        },
+        {
+          "re": "\\bat\\s+(?<value>[^,\\n]+?)(?:\\s+on|\\s*,|$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Final\\s+balance\\s+is\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Bal(?:ance)?[:\\s]*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+Bal(?:ance)?[:\\s]*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avl\\s+Bal[:\\s]*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "Info:\\s*IMPS/[^/]+/(?<value>[^/]+)/"
+        },
+        {
+          "re": "RRN[:\\s]*(?<value>\\d{12})"
+        },
+        {
+          "re": "Ref(?:erence)?[:\\s]*(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "A/c\\s+[X*]*(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "Account\\s+[X*]*(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "from\\s+[X*]*(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "to\\s+[X*]*(?<value>\\d{4})",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["debit", "withdrawn", "spent", "purchase", "paid", "transfer to"],
+      "income": ["credit", "deposited", "received", "refund", "transfer from", "cashback"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s+PVT\\.?\\s+LTD\\.?$",
+        "\\s+LTD\\.?$",
+        "[-\\s]+$",
+        "\\s+on\\s+\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4}.*$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["upi", "credit"],
+          "notContainsAny": ["info:", "@"]
+        },
+        "field": "merchant",
+        "value": "UPI Credit"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["upi"],
+          "notContainsAny": ["info:", "@", "credit"]
+        },
+        "field": "merchant",
+        "value": "UPI Transaction"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "imps credit with reference",
+      "sender": "SIBSMS",
+      "receivedAt": "2025-08-20T12:13:23.000Z",
+      "body": "Dear Customer, Your A/c X7377 is credited with Rs.792.02 Info: IMPS/FDRL/528005821348/EPIFI ACCOUN. Final balance is Rs.793.02-South Indian Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "792.02",
+          "merchant": "EPIFI ACCOUN",
+          "accountLast4": "7377",
+          "balance": "793.02",
+          "transactionType": "INCOME",
+          "reference": "528005821348"
+        }
+      }
+    },
+    {
+      "name": "upi debit with rrn and balance",
+      "sender": "SIBSMS",
+      "receivedAt": "2025-10-16T16:25:29.000Z",
+      "body": "UPI debit:Rs.599.00 A/c X7477, 16-10-25 16:25:29 RRN: 565526068910 Bal:Rs.12345.89 Block A/c? Call18004251809/SMS BLK<A/c>to 9840777222-South Indian Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "599.00",
+          "merchant": "UPI Transaction",
+          "accountLast4": "7477",
+          "balance": "12345.89",
+          "transactionType": "EXPENSE",
+          "reference": "565526068910"
+        }
+      }
+    },
+    {
+      "name": "debit card usage",
+      "sender": "VM-SIBSMS-S",
+      "receivedAt": "2025-10-20T10:00:00.000Z",
+      "body": "A/c X7477 DEBIT:Rs.983.75 SPICE KITCHEN MCT Bal:Rs.1234.67 Block A/c? call 18004251809/SMS BLK<full A/c>to 9840777222-South Indian Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "983.75",
+          "merchant": "SPICE KITCHEN MCT",
+          "accountLast4": "7477",
+          "balance": "1234.67",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "upi debit with comma separator and rrn",
+      "sender": "SIBSMS",
+      "receivedAt": "2025-11-03T00:12:50.000Z",
+      "body": "UPI debit:Rs.42225.06, A/c X7477, 03-11-25 00:12:50 RRN:567304295699. Bal:Rs.35037.21 Block A/c? Cal118004251809/SMS BLK<A/c>to 9840777222-South Indian Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "42225.06",
+          "merchant": "UPI Transaction",
+          "accountLast4": "7477",
+          "balance": "35037.21",
+          "transactionType": "EXPENSE",
+          "reference": "567304295699"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "AD-SIBSMS",
+      "receivedAt": "2025-11-05T09:00:00.000Z",
+      "body": "Your OTP for South Indian Bank Net Banking login is 482913. Do not share it with anyone. -South Indian Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "upi autopay scheduled reminder is filter-rejected",
+      "sender": "SIBSMS",
+      "receivedAt": "2025-11-12T08:00:00.000Z",
+      "body": "UPI Auto Pay of Rs.299.00 for NETFLIX is scheduled on 15-11-25 from your A/c X7477. -South Indian Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

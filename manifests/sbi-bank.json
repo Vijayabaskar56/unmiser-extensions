@@ -1,0 +1,142 @@
+{
+  "$schema": "../manifest.schema.json",
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.sbi.bank",
+    "type": "sms-parser",
+    "name": "State Bank of India",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["SBI", "SBIBK", "SBICRD", "ATMSBI"],
+      "dltPatterns": ["^[A-Z]{2}-SBIBK.*$", "^[A-Z]{2}-SBI.*$", ".*CBSSBI.*"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "one time password", "offer", "minimum amount due"],
+      "requireAnyKeyword": ["debited", "credited", "debit", "credit", "spent", "withdrawn"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "has\\s+credit\\s+for\\s+[^.\\n]+?\\s+of\\s+(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "has\\s+a\\s+debit\\s+by\\s+transfer\\s+of\\s+(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)\\s+spent"
+        },
+        {
+          "re": "(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "done\\s+at\\s+(?<value>[^.\\n]+?)(?:\\s+on\\s+|$)"
+        },
+        {
+          "re": "has\\s+credit\\s+for\\s+(?<value>[^.\\n]+?)\\s+of"
+        },
+        {
+          "re": "trf\\s+to\\s+(?<value>[^.\\n]+?)(?:\\s+Ref|$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Avl\\s+Bal\\s+(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "updated\\s+available\\s+balance\\s+is\\s+(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?:Ref\\s+No\\.?|transaction\\s+number)\\s*(?<value>[A-Z0-9-]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "A/C\\s+(?:X+|\\*+)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "SBI\\s+Debit\\s+Card\\s+(?<value>[\\w-]+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": [
+        "debited for",
+        "is debited",
+        "withdrawn",
+        "transferred",
+        "debit",
+        "paid to",
+        "spent"
+      ],
+      "income": ["credited", "has credit for", "received transfer"]
+    },
+    "cardRules": {
+      "includeKeywords": ["sbi debit card", "credit card", "card ending"],
+      "excludeKeywords": ["a/c", "account"]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s+Ref.*$", "\\s+on\\s+\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}.*$"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "senderContainsAny": ["SBICRD"],
+          "containsAny": ["spent on"]
+        },
+        "field": "transactionType",
+        "value": "CREDIT"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "merchant",
+        "value": "SBI Transaction"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "account credit",
+      "sender": "JD-CBSSBI",
+      "receivedAt": "2026-06-09T10:10:00.000Z",
+      "body": "Your A/C XXXXX314502 has credit for BY SALARY of Rs 10,700.00 on 02/05/22. Avl Bal Rs 13,50,000.00.-SBI",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "10700.00",
+          "merchant": "BY SALARY",
+          "balance": "1350000.00",
+          "accountLast4": "4502",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "debit card spend",
+      "sender": "ATMSBI",
+      "receivedAt": "2026-06-09T10:12:00.000Z",
+      "body": "Dear Customer, transaction number 1234 for Rs.383.00 by SBI Debit Card 0000 done at merchant on 13Sep25. Your updated available balance is Rs.999999999.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "383.00",
+          "merchant": "merchant",
+          "reference": "1234",
+          "accountLast4": "0000",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    }
+  ]
+}

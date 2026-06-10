@@ -1,0 +1,109 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro PrimeCommercialBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/PrimeCommercialBankParser.kt). Prime Commercial Bank (Nepal) SMS format: \"Dear NAME, NPR 1,234.50 is withdrawn from A/C XXX#1234 on 01/01/2026 05:55. Rmk: 9812345678. Good Baln: NPR 321.45\" The Kotlin parser uses the date-time after \"on\" as the reference, the \"Rmk:\" value as the merchant, and the 4 digits after \"#\" as the account last-4."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "np.primecommercial.bank",
+    "type": "sms-parser",
+    "name": "Prime Commercial Bank",
+    "country": "NP",
+    "currency": "NPR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["PCBLNPKA", "PRIME_ALERT", "PRIME"],
+      "dltPatterns": ["^.*PCBLNPKA.*$", "^.*PRIME.*$"]
+    },
+    "filter": {
+      "requireAnyKeyword": ["withdrawn", "deposited"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "NPR\\s+(?<value>[0-9,]+\\.\\d{2})"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "Rmk:\\s*(?<value>[^.\\s]+)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "\\bon\\s+(?<value>\\d{2}/\\d{2}/\\d{4}\\s+\\d{2}:\\d{2})\\b"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "#(?<value>\\d{4})"
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["withdrawn"],
+      "income": ["deposited"]
+    }
+  },
+  "fixtures": [
+    {
+      "name": "debit transaction - withdrawn with phone remark",
+      "sender": "PCBLNPKA",
+      "receivedAt": "2026-01-01T05:55:00.000Z",
+      "body": "Dear FOO, NPR 1,234.50 is withdrawn from A/C XXX#1234 on 01/01/2026 05:55. Rmk: 9812345678. Good Baln: NPR 321.45",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1234.50",
+          "merchant": "9812345678",
+          "accountLast4": "1234",
+          "transactionType": "EXPENSE",
+          "reference": "01/01/2026 05:55"
+        }
+      }
+    },
+    {
+      "name": "credit transaction - deposited with text remark",
+      "sender": "PRIME_ALERT",
+      "receivedAt": "2026-01-01T05:55:00.000Z",
+      "body": "Dear FOO, NPR 9,876.00 is deposited in A/C XXX#5678 on 01/01/2026 05:55. Rmk: CASHDEP. Good Baln: NPR 54321.123.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "9876.00",
+          "merchant": "CASHDEP",
+          "accountLast4": "5678",
+          "transactionType": "INCOME",
+          "reference": "01/01/2026 05:55"
+        }
+      }
+    },
+    {
+      "name": "dlt-style sender with hyphens still dispatches",
+      "sender": "AD-PRIME-ALERT",
+      "receivedAt": "2026-02-15T10:30:00.000Z",
+      "body": "Dear FOO, NPR 500.00 is deposited in A/C XXX#9012 on 15/02/2026 10:30. Rmk: SALARY. Good Baln: NPR 12500.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "SALARY",
+          "accountLast4": "9012",
+          "transactionType": "INCOME",
+          "reference": "15/02/2026 10:30"
+        }
+      }
+    },
+    {
+      "name": "otp message without movement keyword is filter-rejected",
+      "sender": "PCBLNPKA",
+      "receivedAt": "2026-03-01T09:00:00.000Z",
+      "body": "Dear Customer, your OTP for Prime Commercial Bank login is 123456. Do not share it with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

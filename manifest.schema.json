@@ -1,0 +1,743 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0"
+        },
+        "pluginId": {
+          "type": "string",
+          "minLength": 3
+        },
+        "type": {
+          "type": "string",
+          "const": "sms-parser"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "country": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trust": {
+          "type": "string",
+          "enum": ["bundled", "owner", "community"]
+        },
+        "dispatch": {
+          "type": "object",
+          "properties": {
+            "senders": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "dltPatterns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "filter": {
+          "type": "object",
+          "properties": {
+            "excludeKeywords": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "requireAnyKeyword": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "extract": {
+          "type": "object",
+          "properties": {
+            "amount": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "re": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "flags": {
+                    "type": "string"
+                  },
+                  "group": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "takeLast4": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["re"]
+              }
+            },
+            "merchant": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "re": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "flags": {
+                    "type": "string"
+                  },
+                  "group": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "takeLast4": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["re"]
+              }
+            },
+            "balance": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "re": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "flags": {
+                    "type": "string"
+                  },
+                  "group": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "takeLast4": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["re"]
+              }
+            },
+            "reference": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "re": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "flags": {
+                    "type": "string"
+                  },
+                  "group": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "takeLast4": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["re"]
+              }
+            },
+            "accountLast4": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "re": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "flags": {
+                    "type": "string"
+                  },
+                  "group": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "takeLast4": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["re"]
+              }
+            },
+            "creditLimit": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "re": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "flags": {
+                    "type": "string"
+                  },
+                  "group": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "takeLast4": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["re"]
+              }
+            }
+          }
+        },
+        "typeRules": {
+          "type": "object",
+          "properties": {
+            "income": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "expense": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "credit": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "transfer": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "investment": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "cardRules": {
+          "type": "object",
+          "properties": {
+            "includeKeywords": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "excludeKeywords": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "cleaning": {
+          "type": "object",
+          "properties": {
+            "stripPatterns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "minMerchantLength": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "commonWords": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "pipeline": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "rejectWhen"
+                  },
+                  "when": {
+                    "type": "object",
+                    "properties": {
+                      "containsAny": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "containsAll": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "notContainsAny": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "senderContainsAny": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "NO_MATCHING_MANIFEST",
+                      "FILTER_REJECTED",
+                      "MISSING_AMOUNT",
+                      "MISSING_TYPE",
+                      "MISSING_MERCHANT",
+                      "AMBIGUOUS_FIELD",
+                      "PIPELINE_REJECTED"
+                    ]
+                  }
+                },
+                "required": ["kind", "when"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "extractFieldWhen"
+                  },
+                  "when": {
+                    "type": "object",
+                    "properties": {
+                      "containsAny": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "containsAll": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "notContainsAny": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "senderContainsAny": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "field": {
+                    "type": "string",
+                    "enum": [
+                      "amount",
+                      "merchant",
+                      "balance",
+                      "reference",
+                      "accountLast4",
+                      "creditLimit"
+                    ]
+                  },
+                  "extractors": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "re": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "flags": {
+                          "type": "string"
+                        },
+                        "group": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        },
+                        "takeLast4": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["re"]
+                    }
+                  }
+                },
+                "required": ["kind", "when", "field", "extractors"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "setFieldWhen"
+                  },
+                  "when": {
+                    "type": "object",
+                    "properties": {
+                      "containsAny": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "containsAll": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "notContainsAny": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "senderContainsAny": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "field": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "amount",
+                          "merchant",
+                          "balance",
+                          "reference",
+                          "accountLast4",
+                          "creditLimit"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["transactionType", "isFromCard"]
+                      }
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  }
+                },
+                "required": ["kind", "when", "field", "value"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "fallbackField"
+                  },
+                  "field": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "amount",
+                          "merchant",
+                          "balance",
+                          "reference",
+                          "accountLast4",
+                          "creditLimit"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["transactionType", "isFromCard"]
+                      }
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  }
+                },
+                "required": ["kind", "field", "value"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "confidenceWhen"
+                  },
+                  "when": {
+                    "type": "object",
+                    "properties": {
+                      "containsAny": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "containsAll": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "notContainsAny": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "senderContainsAny": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "confidence": {
+                    "type": "string",
+                    "enum": ["HIGH", "REVIEW", "REJECTED"]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "NO_MATCHING_MANIFEST",
+                      "FILTER_REJECTED",
+                      "MISSING_AMOUNT",
+                      "MISSING_TYPE",
+                      "MISSING_MERCHANT",
+                      "AMBIGUOUS_FIELD",
+                      "PIPELINE_REJECTED"
+                    ]
+                  }
+                },
+                "required": ["kind", "when", "confidence"]
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "pluginId",
+        "type",
+        "name",
+        "country",
+        "currency",
+        "version",
+        "trust",
+        "dispatch",
+        "extract"
+      ]
+    },
+    "fixtures": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sender": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1
+          },
+          "receivedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected": {
+            "type": "object",
+            "properties": {
+              "confidence": {
+                "type": "string",
+                "enum": ["HIGH", "REVIEW", "REJECTED"]
+              },
+              "fields": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "string"
+                  },
+                  "merchant": {
+                    "type": "string"
+                  },
+                  "balance": {
+                    "type": "string"
+                  },
+                  "reference": {
+                    "type": "string"
+                  },
+                  "accountLast4": {
+                    "type": "string"
+                  },
+                  "creditLimit": {
+                    "type": "string"
+                  },
+                  "currency": {
+                    "type": "string"
+                  },
+                  "bankName": {
+                    "type": "string"
+                  },
+                  "transactionType": {
+                    "type": "string",
+                    "enum": ["INCOME", "EXPENSE", "CREDIT", "TRANSFER", "INVESTMENT"]
+                  },
+                  "isFromCard": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "NO_MATCHING_MANIFEST",
+                    "FILTER_REJECTED",
+                    "MISSING_AMOUNT",
+                    "MISSING_TYPE",
+                    "MISSING_MERCHANT",
+                    "AMBIGUOUS_FIELD",
+                    "PIPELINE_REJECTED"
+                  ]
+                }
+              }
+            },
+            "required": ["confidence"]
+          }
+        },
+        "required": ["name", "sender", "body", "receivedAt", "expected"]
+      }
+    }
+  },
+  "required": ["manifest", "fixtures"],
+  "title": "Unmiser SMS parser plugin bundle",
+  "description": "A bank SMS parser plugin: the declarative manifest plus fixtures proving it. Validate with `bun scripts/validate-manifest.ts <file>`."
+}

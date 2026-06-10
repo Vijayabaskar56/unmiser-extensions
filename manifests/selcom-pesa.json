@@ -1,0 +1,209 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro SelcomPesaParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/SelcomPesaParser.kt). Selcom Pesa is a Tanzanian mobile-money wallet; transaction SMSes lead with a reference id followed by \"Confirmed.\"/\"Accepted.\" and a \"You have received/sent/paid/withdrawn TZS ...\" narrative, ending with \"Updated balance is TZS ...\". Card payments and ATM withdrawals carry \"card ending [with] NNNN\". The Kotlin isTransactionMessage requires BOTH a confirmed/accepted marker AND an action keyword; the manifest filter expresses the action keywords and a pipeline rejectWhen downgrades messages missing \"confirmed\"/\"accepted\" (REVIEW rather than a hard REJECT — closest engine-expressible approximation). Like JioPay, wallet transactions without a card carry no account number, so accountLast4 falls back to \"0000\" to route to the linked wallet provider account (the Kotlin parser returned null)."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "tz.selcom.wallet",
+    "type": "sms-parser",
+    "name": "Selcom Pesa",
+    "country": "TZ",
+    "currency": "TZS",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["SELCOM", "SELCOM PESA", "SELCOMPESA", "Selcom Pesa"],
+      "dltPatterns": ["^.*SELCOM.*$"]
+    },
+    "filter": {
+      "requireAnyKeyword": [
+        "you have received",
+        "you have sent",
+        "you have paid",
+        "you have withdrawn",
+        "updated balance"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "TZS\\s+(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "from\\s+(?<value>[A-Z][A-Za-z\\s]+?)(?:\\s+-\\s+[^(]+)?\\s*\\([^)]+\\)"
+        },
+        {
+          "re": "to\\s+(?<value>[A-Z][A-Za-z\\s]+?)(?:\\s+-\\s+[^(]+)?\\s*\\([^)]+\\)"
+        },
+        {
+          "re": "paid\\s+TZS\\s+[0-9,]+(?:\\.[0-9]{2})?\\s+to\\s+(?<value>[A-Za-z0-9\\s]+?)(?:\\s+using|\\s+on)"
+        },
+        {
+          "re": "at\\s+(?<value>ATM\\s+-?\\s*[^u]+?)(?:\\s+using|$)"
+        },
+        {
+          "re": "to\\s+(?<value>[A-Z][A-Za-z\\s]+?)(?:\\s+on\\s+|\\s*$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Updated balance is TZS\\s+(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "^(?<value>[A-Z0-9]{8,9})\\s+(?:Confirmed|Accepted)"
+        },
+        {
+          "re": "TIPS\\s+Reference[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "card\\s+ending\\s+(?:with\\s+)?(?<value>\\d{4})"
+        }
+      ]
+    },
+    "typeRules": {
+      "income": ["you have received"],
+      "expense": ["you have sent", "you have paid", "you have withdrawn"]
+    },
+    "cardRules": {
+      "includeKeywords": ["card ending", "using your card"],
+      "excludeKeywords": []
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s*\\(.*?\\)\\s*$", "\\s+on\\s+\\d{4}.*", "\\s*-\\s*$"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "rejectWhen",
+        "when": {
+          "notContainsAny": ["confirmed", "accepted"]
+        },
+        "reason": "FILTER_REJECTED"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "accountLast4",
+        "value": "0000"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "incoming transfer / cash-in",
+      "sender": "Selcom Pesa",
+      "receivedAt": "2025-04-26T11:50:00.000Z",
+      "body": "0426JXCX Confirmed. You have received TZS 175,000.00 from MICHAEL EMIL LUYANGI - NMB (201100XXXXX) on 2025-04-26 11:50. Updated balance is TZS 175,000.00. Help 0800 714 888 / 0800 784 888",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "175000.00",
+          "merchant": "MICHAEL EMIL LUYANGI",
+          "transactionType": "INCOME",
+          "balance": "175000.00",
+          "reference": "0426JXCX",
+          "accountLast4": "0000",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "outgoing transfer with tax breakdown",
+      "sender": "Selcom Pesa",
+      "receivedAt": "2025-04-26T11:56:00.000Z",
+      "body": "0426JXGC Accepted. You have sent TZS 50,000.00 to NURU ISSA - Mixx by Yas (Tigo Pesa) (25571XXXXXXX) on 2025-04-26 11:56. Total charges TZS 550.00 (Fee 424, VAT 84, Ex Duty 42). Updated balance is TZS 124,450.00. Help 0800 714 888 / 0800 784 888",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "50000.00",
+          "merchant": "NURU ISSA",
+          "transactionType": "EXPENSE",
+          "balance": "124450.00",
+          "reference": "0426JXGC",
+          "accountLast4": "0000",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal with card",
+      "sender": "Selcom Pesa",
+      "receivedAt": "2025-10-23T18:00:00.000Z",
+      "body": "10234C2WQ Confirmed. You have withdrawn TZS 200,000.00 at ATM - TEMEKE BRANCH using your card ending with 8318 on 2025-10-23 18:00. Total charges TZS 2,500.00 (Fee 1,926, VAT 381, Ex Duty 193). Govt Levy TZS ( (resp govtLevy ) ). Updated balance is TZS 2,264,749.05. Help 0800 714 888 / 0800 784 888",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "200000.00",
+          "merchant": "ATM - TEMEKE BRANCH",
+          "transactionType": "EXPENSE",
+          "balance": "2264749.05",
+          "reference": "10234C2WQ",
+          "accountLast4": "8318",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "merchant card payment",
+      "sender": "SELCOM",
+      "receivedAt": "2025-04-28T11:36:00.000Z",
+      "body": "0428KRRY Confirmed. You have paid TZS 8,900.00 to APPLECOMBILL using your card ending 1915 on 2025-04-28 11:36. Updated balance is TZS 1,650.00. Help 0800 714 888 / 0800 784 888",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "8900.00",
+          "merchant": "APPLECOMBILL",
+          "transactionType": "EXPENSE",
+          "balance": "1650.00",
+          "reference": "0428KRRY",
+          "accountLast4": "1915",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "promotional / free transaction",
+      "sender": "Selcom Pesa",
+      "receivedAt": "2025-04-26T12:10:00.000Z",
+      "body": "0426JXSG Accepted. You have sent TZS 80,000.00 to CATHERINE MINJA - Airtel Money (255694XXXXXX) for Taka April 2025 on 2025-04-26 12:10. Charge is FREE. Transaction 1 of 5 kwa Jero. Updated balance is TZS 550.00. Help 0800 714 888 / 0800 784 888",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "80000.00",
+          "merchant": "CATHERINE MINJA",
+          "transactionType": "EXPENSE",
+          "balance": "550.00",
+          "reference": "0426JXSG",
+          "accountLast4": "0000",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "action keyword without confirmed/accepted marker is downgraded",
+      "sender": "Selcom Pesa",
+      "receivedAt": "2025-05-01T09:00:00.000Z",
+      "body": "You have received TZS 5,000.00 from JOHN DOE - NMB (255712XXXXXX) on 2025-05-01 09:00. Updated balance is TZS 5,550.00.",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "Selcom Pesa",
+      "receivedAt": "2025-05-02T10:00:00.000Z",
+      "body": "Your Selcom Pesa OTP is 482913. Do not share this code with anyone. Help 0800 714 888",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

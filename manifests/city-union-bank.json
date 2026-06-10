@@ -1,0 +1,209 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro CityUnionBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/CityUnionBankParser.kt). Documented formats: - \"Your a/c no. XXXX is debited for Rs.111.00 on 01-09-2025 and credited to a/c no. YYYY (UPI Ref no 123456789012)\" - \"Your a/c no. XXXX is credited for Rs.111.00 on 01-09-2025 and debited from a/c no. YYYY (UPI Ref no 123456789012)\" - \"Savings No XXXX credited with INR 111.00 towards BY NEFT TRF:NAME YYYY: on 01-SEP-2025. Avl Bal 120.00\" Faithful-port notes: - The Kotlin type check tests all debit phrases before any credit phrase, so the \"is credited ... and debited from a/c\" UPI credit narrative classifies as EXPENSE in the original. The engine's expense>income priority with a plain \"debited\" keyword reproduces that exactly. - Kotlin builds merchant strings dynamically (\"UPI Transfer to A/C XX1234\", \"NEFT - <name>\"). The engine cannot template extracted values into strings, so UPI transfers get static \"UPI Transfer to A/C\" / \"UPI Transfer from A/C\" labels and NEFT merchants are the bare counterparty name."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.cityunion.bank",
+    "type": "sms-parser",
+    "name": "City Union Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["CUBANK", "CUBLTD", "CUB"],
+      "dltPatterns": ["^.*CUBANK.*$", "^.*CUBLTD.*$", "^.*CUB.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification",
+        "request",
+        "offer",
+        "discount",
+        "win ",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "debited\\s+for\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "credited\\s+for\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "credited\\s+with\\s+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "BY\\s+NEFT\\s+TRF:(?<value>[^:]+)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Avl\\s+Bal\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Avl|Available)\\s+Bal(?:ance)?:?\\s*(?:Rs\\.?|INR)?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "\\(UPI\\s+Ref\\s+no\\s+(?<value>\\d+)\\)"
+        },
+        {
+          "re": "NEFT[:/]\\s*(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "Your\\s+a/c\\s+no\\.\\s+[X]*(?<value>\\d{3,4})",
+          "takeLast4": true
+        },
+        {
+          "re": "Savings\\s+No\\s+[X]*(?<value>\\d{3,4})",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["credited", "deposited", "received", "refund", "neft trf"]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s+PVT\\.?\\s+LTD\\.?$", "\\s+LTD\\.?$"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["upi ref", "credited to a/c no"]
+        },
+        "field": "merchant",
+        "value": "UPI Transfer to A/C"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["upi ref", "debited from a/c no"]
+        },
+        "field": "merchant",
+        "value": "UPI Transfer from A/C"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["upi ref"],
+          "notContainsAny": ["credited to a/c no", "debited from a/c no"]
+        },
+        "field": "merchant",
+        "value": "UPI Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credited to a/c", "debited from a/c"],
+          "notContainsAny": ["upi ref", "neft trf"]
+        },
+        "field": "merchant",
+        "value": "Account Transfer"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "upi debit to counterparty account",
+      "sender": "JK-CUBLTD-S",
+      "receivedAt": "2025-09-01T10:15:00.000Z",
+      "body": "Your a/c no. XXXXXXXXXXX4321 is debited for Rs.111.00 on 01-09-2025 and credited to a/c no. XXXXXXXXXX9876 (UPI Ref no 123456789012) -CUB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "111.00",
+          "merchant": "UPI Transfer to A/C",
+          "accountLast4": "4321",
+          "transactionType": "EXPENSE",
+          "reference": "123456789012"
+        }
+      }
+    },
+    {
+      "name": "upi credit from counterparty account (Kotlin classifies as EXPENSE via 'debited from')",
+      "sender": "XX-CUBLTD-T",
+      "receivedAt": "2025-09-01T12:30:00.000Z",
+      "body": "Your a/c no. XXXXXXXXXXX4321 is credited for Rs.500.00 on 01-09-2025 and debited from a/c no. XXXXXXXXXX9876 (UPI Ref no 223456789012) -CUB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "UPI Transfer from A/C",
+          "accountLast4": "4321",
+          "transactionType": "EXPENSE",
+          "reference": "223456789012"
+        }
+      }
+    },
+    {
+      "name": "neft credit with sender name and balance",
+      "sender": "AD-CUBANK-S",
+      "receivedAt": "2025-09-01T09:00:00.000Z",
+      "body": "Savings No XXXXXXXXXXX4321 credited with INR 2500.00 towards BY NEFT TRF:AMBANI 9876543210123: on 01-SEP-2025. Avl Bal 12120.50",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2500.00",
+          "merchant": "AMBANI 9876543210123",
+          "accountLast4": "4321",
+          "balance": "12120.50",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "JK-CUBLTD-S",
+      "receivedAt": "2025-09-02T08:00:00.000Z",
+      "body": "Your OTP for City Union Bank Net Banking login is 456789. Valid for 10 minutes. Do not share it with anyone. -CUB",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "upi collect request is filter-rejected",
+      "sender": "XX-CUBLTD-T",
+      "receivedAt": "2025-09-03T08:00:00.000Z",
+      "body": "Collect request received: VENDOR STORE has requested Rs.250.00 from your a/c no. XXXXXXXXXXX4321 via UPI. Approve in your UPI app. -CUB",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,268 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro ZemenBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/ZemenBankParser.kt). Zemen Bank (Ethiopia, ETB) narratives: \"has been credited with ETB ... from telebirr wallet NNN with reference FT...\", \"a fund transfer has been made from your account ... to A/c of NNN\", POS/ATM \"transaction POS|ATM location is ...\", and \"you have transferred ... to NAME with reference\". The Kotlin parser checks the credited keywords BEFORE any debit/expense keyword, so the INCOME classification is replicated as a pipeline step that runs before typeRules (engine typeRules would otherwise test expense first)."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "et.zemen.bank",
+    "type": "sms-parser",
+    "name": "Zemen Bank",
+    "country": "ET",
+    "currency": "ETB",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["ZEMEN BANK", "ZEMENBANK"],
+      "dltPatterns": ["^[A-Z]{2}-ZEMENBANK-[A-Z]$"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "one time password", "verification code", "offer", "discount"],
+      "requireAnyKeyword": [
+        "dear customer",
+        "your account",
+        "has been credited",
+        "has been debited",
+        "fund transfer has been made from",
+        "pos transaction has been made from",
+        "atm cash withdrawal has been made from",
+        "current balance",
+        "available bal.",
+        "thank you for banking with zemen bank",
+        "etb",
+        "birr",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?:ETB|Birr)\\s+(?<value>[0-9,]+(?:\\.[0-9]{1,2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "from\\s+(?<value>telebirr wallet\\s+\\d+)\\s+with reference"
+        },
+        {
+          "re": "to\\s+(?<value>telebirr wallet\\s+\\d+)\\s+with reference"
+        },
+        {
+          "re": "to\\s+A/c\\s+of\\s+(?<value>\\d{6,})"
+        },
+        {
+          "re": "from\\s+(?<value>[^,.]+?)\\s+with reference"
+        },
+        {
+          "re": "pos purchase transaction at\\s+(?<value>.+?)\\s+on\\s+\\d{1,2}-[A-Za-z]{3}-\\d{4}"
+        },
+        {
+          "re": "transaction POS location is\\s+(?<value>.+?)\\s*\\. "
+        },
+        {
+          "re": "to\\s+(?<value>.+?)\\s+with reference"
+        },
+        {
+          "re": "transaction ATM location is\\s+(?<value>.+?)\\s*\\. "
+        }
+      ],
+      "balance": [
+        {
+          "re": "Your\\s+Current\\s+Balance\\s+is\\s+(?:ETB|Birr)\\s+(?<value>[0-9,]+(?:\\.[0-9]{1,2})?)"
+        },
+        {
+          "re": "A/c\\s+Available\\s+Bal\\.\\s+is\\s+(?:ETB|Birr)\\s+(?<value>[0-9,]+(?:\\.[0-9]{1,2})?)"
+        },
+        {
+          "re": "Your\\s+available\\s+balance\\s+is\\s+(?:ETB|Birr)\\s+(?<value>[0-9,]+(?:\\.[0-9]{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "transaction reference number is\\s+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "with reference\\s+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "(?<value>https://share\\.zemenbank\\.com/[^\\s]+?/pdf)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "\\b\\d{3}x+(?<value>\\d{4})\\b"
+        },
+        {
+          "re": "\\(\\d{3}x+(?<value>\\d{4})\\)"
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": [
+        "has been debited",
+        "debited with",
+        "fund transfer has been made from",
+        "pos transaction has been made from",
+        "atm cash withdrawal has been made from",
+        "you have transfered",
+        "you have transferred",
+        "debited",
+        "withdrawn",
+        "spent",
+        "charged",
+        "paid",
+        "purchase",
+        "deducted"
+      ],
+      "income": ["credited", "deposited", "received", "refund"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\([^)]*\\)\\s*$",
+        "\\s*-\\s*$",
+        "\\s+PVT\\.?\\s+LTD\\.?$",
+        "\\s+LTD\\.?$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["has been credited", "credited with"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["transferred", "from a/c"],
+          "notContainsAny": ["has been credited", "credited with"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "credit from telebirr wallet",
+      "sender": "ZemenBank",
+      "receivedAt": "2026-06-09T08:15:00.000Z",
+      "body": "Dear Customer, your account 313xxxxxxx1234 has been credited with ETB 1,500.00 from telebirr wallet 251911223344 with reference FT26160ABCD1 on 09-Jun-2026. Your Current Balance is ETB 12,345.67. Thank you for banking with Zemen Bank.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1500.00",
+          "merchant": "telebirr wallet 251911223344",
+          "accountLast4": "1234",
+          "balance": "12345.67",
+          "reference": "FT26160ABCD1",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "credit from another bank sender",
+      "sender": "Zemen Bank",
+      "receivedAt": "2026-06-08T10:30:00.000Z",
+      "body": "Dear Customer, your account 313xxxxxxx1234 has been credited with ETB 5,000.00 from ABEBE KEBEDE with reference FT26159ZZ001. Your available balance is ETB 15,345.67. Thank you for banking with Zemen Bank.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "merchant": "ABEBE KEBEDE",
+          "accountLast4": "1234",
+          "balance": "15345.67",
+          "reference": "FT26159ZZ001",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "fund transfer debit to internal account",
+      "sender": "AD-ZEMENBANK-S",
+      "receivedAt": "2026-06-10T09:00:00.000Z",
+      "body": "Dear Customer, a fund transfer has been made from your account 313xxxxxxx1234 to A/c of 1020304050 with reference FT26161XYZ90 on 10-Jun-2026. The transferred amount is ETB 2,000.00. Your Current Balance is ETB 10,345.67. Thank you for banking with Zemen Bank.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2000.00",
+          "merchant": "1020304050",
+          "accountLast4": "1234",
+          "balance": "10345.67",
+          "reference": "FT26161XYZ90",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "pos transaction with location",
+      "sender": "ZemenBank",
+      "receivedAt": "2026-06-07T17:45:00.000Z",
+      "body": "Dear Customer, a POS transaction has been made from your account (313xxxxxxx5678) with ETB 850.50. The transaction POS location is EDNA MALL ADDIS ABABA . Your Current Balance is ETB 4,000.00. The transaction reference number is POS123456789. Thank you for banking with Zemen Bank.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "850.50",
+          "merchant": "EDNA MALL ADDIS ABABA",
+          "accountLast4": "5678",
+          "balance": "4000.00",
+          "reference": "POS123456789",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "atm cash withdrawal with location",
+      "sender": "ZemenBank",
+      "receivedAt": "2026-06-05T12:20:00.000Z",
+      "body": "Dear Customer, an ATM cash withdrawal has been made from your account 313xxxxxxx1234 with ETB 3,000.00. The transaction ATM location is BOLE MEDHANIALEM BRANCH . A/c Available Bal. is ETB 7,345.67. Thank you for banking with Zemen Bank.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "3000.00",
+          "merchant": "BOLE MEDHANIALEM BRANCH",
+          "accountLast4": "1234",
+          "balance": "7345.67",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "outgoing transfer to external beneficiary",
+      "sender": "Zemen Bank",
+      "receivedAt": "2026-06-04T15:10:00.000Z",
+      "body": "Dear Customer, you have transferred ETB 700.00 to ALMAZ TESFAYE with reference FT26155BBB12 from your account 313xxxxxxx1234. Your Current Balance is ETB 9,645.67. Thank you for banking with Zemen Bank.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "700.00",
+          "merchant": "ALMAZ TESFAYE",
+          "accountLast4": "1234",
+          "balance": "9645.67",
+          "reference": "FT26155BBB12",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "ZemenBank",
+      "receivedAt": "2026-06-03T11:00:00.000Z",
+      "body": "Your OTP for Zemen Bank internet banking login is 482910. Do not share this code with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

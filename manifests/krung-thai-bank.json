@@ -1,0 +1,238 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro KrungThaiBankParser.kt + BaseThailandBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/). The Krungthai parser itself only defines canHandle/getBankName — all extraction and classification behavior comes from BaseThailandBankParser (THB amounts in Thai/English, \"Bal/คงเหลือ\" balances, \"A/C|บช xNNNN\" accounts, \"at|ร้าน\" merchants, Thai+English type keywords) plus the BankParser base fallbacks (CompiledPatterns Account/Reference). Fixture bodies for the first three cases are verbatim from ThailandBankParsersTest.kt."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "th.ktb.bank",
+    "type": "sms-parser",
+    "name": "Krungthai Bank",
+    "country": "TH",
+    "currency": "THB",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["KTB"],
+      "dltPatterns": ["^.*KRUNG\\s?THAI.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "รหัส",
+        "ยืนยัน",
+        "สมัคร",
+        "โปรโมชั่น",
+        "promotion",
+        "cashback offer"
+      ],
+      "requireAnyKeyword": [
+        "เงินเข้า",
+        "เงินออก",
+        "ถอนเงิน",
+        "โอนเงิน",
+        "ใช้จ่าย",
+        "เงินฝาก",
+        "รับเงิน",
+        "คงเหลือ",
+        "บาท",
+        "ยอดใช้จ่าย",
+        "withdrawal",
+        "deposit",
+        "transfer",
+        "payment",
+        "spent",
+        "receive",
+        "bal",
+        "thb",
+        "card transaction",
+        "card payment",
+        "credit card spending",
+        "available limit"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:THB|฿)\\s*(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*USD"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "(?:at|ร้าน)\\s+(?<value>[A-Za-z0-9\\s&._-]+?)(?:\\s+(?:A/C|บช|Bal|คงเหลือ|Available|on|$))"
+        },
+        {
+          "re": "at\\s+(?<value>[A-Za-z0-9\\s&._-]+)$"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        },
+        {
+          "re": "(?:Bal|คงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]+)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]+)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/C|บช)\\s*x(?<value>\\d{4})"
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "(?:Available limit|วงเงินคงเหลือ)\\s+(?<value>\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:THB|บาท)"
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": ["clearing corporation", "mutual fund", "sip purchase"],
+      "credit": ["credit card spending", "ยอดใช้จ่ายต่างประเทศ", "ยอดใช้จ่าย"],
+      "expense": [
+        "เงินออก",
+        "ถอนเงิน",
+        "ถอนเงินสด",
+        "โอนเงินออก",
+        "โอนเงินผ่าน",
+        "ใช้จ่ายบัตร",
+        "ใช้จ่าย",
+        "withdrawal",
+        "payment",
+        "you spent",
+        "transfer out",
+        "card payment",
+        "card transaction",
+        "atm withdrawal"
+      ],
+      "income": [
+        "เงินเข้า",
+        "เงินฝาก",
+        "รับเงิน",
+        "โอนเงินเข้า",
+        "รับเงินพร้อมเพย์",
+        "รับเงินโอน",
+        "เงินฝากเข้า",
+        "deposit",
+        "receive",
+        "transfer in",
+        "transfer received"
+      ]
+    },
+    "cleaning": {
+      "minMerchantLength": 2,
+      "commonWords": ["ผ่าน", "โดย", "จาก", "ที่", "ไปยัง", "ถึง"]
+    }
+  },
+  "fixtures": [
+    {
+      "name": "KTB deposit (Thai)",
+      "sender": "KTB",
+      "receivedAt": "2026-01-21T10:15:00.000Z",
+      "body": "KTB: เงินเข้า 4,200.00 บาท บช x7788 คงเหลือ 12,350.75 บาท",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "4200.00",
+          "transactionType": "INCOME",
+          "accountLast4": "7788",
+          "balance": "12350.75"
+        }
+      }
+    },
+    {
+      "name": "KTB ATM withdrawal (Thai)",
+      "sender": "KTB",
+      "receivedAt": "2026-01-21T14:32:00.000Z",
+      "body": "KTB: ถอนเงินสด 500.00 บาท บช x7788 คงเหลือ 11,850.75 บาท",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "500.00",
+          "transactionType": "EXPENSE",
+          "accountLast4": "7788",
+          "balance": "11850.75"
+        }
+      }
+    },
+    {
+      "name": "KTB PromptPay receive (Thai)",
+      "sender": "KTB",
+      "receivedAt": "2026-01-22T09:05:00.000Z",
+      "body": "KTB: รับเงินพร้อมเพย์ 2,000.00 บาท บช x7788",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "2000.00",
+          "transactionType": "INCOME",
+          "accountLast4": "7788"
+        }
+      }
+    },
+    {
+      "name": "KTB card payment with merchant (synthesized)",
+      "sender": "KRUNGTHAI",
+      "receivedAt": "2026-01-23T18:40:00.000Z",
+      "body": "KTB: Card payment 890.00 THB at 7-ELEVEN A/C x7788 Bal 10,960.75 THB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "890.00",
+          "transactionType": "EXPENSE",
+          "merchant": "7-ELEVEN",
+          "accountLast4": "7788",
+          "balance": "10960.75"
+        }
+      }
+    },
+    {
+      "name": "KTB credit card spending (synthesized)",
+      "sender": "KRUNG THAI BANK",
+      "receivedAt": "2026-01-24T12:30:00.000Z",
+      "body": "KTB: Credit card spending 3,500.00 THB Card x9012 at CENTRAL WORLD on 24/01/26 12:30 Available limit 46,500.00 THB",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "3500.00",
+          "transactionType": "CREDIT",
+          "merchant": "CENTRAL WORLD",
+          "accountLast4": "9012",
+          "creditLimit": "46500.00"
+        }
+      }
+    },
+    {
+      "name": "OTP message is filter-rejected",
+      "sender": "KTB",
+      "receivedAt": "2026-01-25T10:00:00.000Z",
+      "body": "KTB: รหัส OTP ของคุณคือ 123456 ใช้ภายใน 5 นาที ห้ามบอกรหัสนี้แก่ผู้อื่น",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

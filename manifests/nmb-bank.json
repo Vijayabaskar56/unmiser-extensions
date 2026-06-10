@@ -1,0 +1,182 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro NMBBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/NMBBankParser.kt). NMB Bank, Nepal — currency NPR, common sender NMB_ALERT. The Kotlin parser fully overrides every extractX method (no super.* base fallbacks are reachable), so only its own patterns are ported here. Merchant extraction in Kotlin is a fixed-priority decision tree (transfer > withdrawn > esewa > wallet load); modelled as pipeline setFieldWhen steps in reverse order so the last matching (highest priority) step wins."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "np.nmb.bank",
+    "type": "sms-parser",
+    "name": "NMB Bank",
+    "country": "NP",
+    "currency": "NPR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["NMB_ALERT", "NMBBANK", "NMB"],
+      "dltPatterns": ["^.*NMB.*$"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "password"],
+      "requireAnyKeyword": [
+        "fund transfer",
+        "withdrawn",
+        "deposited",
+        "wallet load",
+        "successful",
+        "credited"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "NPR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "of\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+is successful"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "A/C\\s+(?<value>\\d{8,})",
+          "takeLast4": true
+        },
+        {
+          "re": "A/C\\s+(?<value>\\d+#\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "to A/C\\s+(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ],
+      "reference": [
+        {
+          "re": "\\(FBS:D:FPQR:(?<value>\\d+)\\)",
+          "flags": ""
+        },
+        {
+          "re": "Ref(?:erence)?[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["fund transfer", "withdrawn", "wallet load", "esewa wallet"],
+      "income": ["deposited", "credited"]
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["wallet load"]
+        },
+        "field": "merchant",
+        "value": "Wallet Load"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["esewa wallet load for"]
+        },
+        "field": "merchant",
+        "value": "Esewa Wallet Load"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["withdrawn"]
+        },
+        "field": "merchant",
+        "value": "ATM Withdrawal"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["transfer"]
+        },
+        "field": "merchant",
+        "value": "Fund Transfer"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["transfer", "to a/c"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "fund transfer to account",
+      "sender": "NMB_ALERT",
+      "receivedAt": "2025-02-19T15:38:23.000Z",
+      "body": "NMB_ALERT:\n\nFund transfer of NPR 250.00 to A/C 01000000055 was successful on 19-Feb-2025 15:38:23 If you have not done this transfer please contact us immediately.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "250.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Fund Transfer",
+          "accountLast4": "0055"
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal with FBS reference and hash account",
+      "sender": "NMB_ALERT",
+      "receivedAt": "2025-05-24T10:15:00.000Z",
+      "body": "NMB_ALERT:\n\nEnjoy the new features of eNMB App. Click here to learn more bit.ly/3qpteyE A/C 0#16 withdrawn NPR 700.00 on 24/05/2025 (FBS:D:FPQR:523396049).\n.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "700.00",
+          "transactionType": "EXPENSE",
+          "merchant": "ATM Withdrawal",
+          "accountLast4": "016",
+          "reference": "523396049"
+        }
+      }
+    },
+    {
+      "name": "esewa wallet load without NPR prefix",
+      "sender": "NMB_ALERT",
+      "receivedAt": "2025-05-24T18:26:26.000Z",
+      "body": "NMB_ALERT:\n\nYour  Esewa Wallet Load for 9850000007 of 300.00 is successful on 24-May-2025 18:26:26 .",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "300.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Esewa Wallet Load"
+        }
+      }
+    },
+    {
+      "name": "deposit credited is income",
+      "sender": "NMBBANK",
+      "receivedAt": "2025-06-01T09:00:00.000Z",
+      "body": "NMB_ALERT:\n\nNPR 5,000.00 deposited to A/C 01000000055 was successful on 01-Jun-2025 09:00:00.",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "5000.00",
+          "transactionType": "INCOME",
+          "accountLast4": "0055"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "NMB_ALERT",
+      "receivedAt": "2025-06-02T12:00:00.000Z",
+      "body": "NMB_ALERT: Your OTP for eNMB login is 482913. Do not share this password with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

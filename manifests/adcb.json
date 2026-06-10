@@ -1,0 +1,430 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro ADCBParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/ADCBParser.kt), which inherits the UAE FABParser. ADCB overrides every extractor with its own formats (debit card \"was used for\", ATM \"withdrawn from\"/\"deposited via ATM\", \"transferred via\", \"Cr./Dr. transaction of\", TouchPoints redemption), so the manifest ports the ADCB patterns in their original priority order plus the FAB account fallbacks (\"Card No XXXX\", \"Account XXXX\"). Engine deviations from the Kotlin parser are noted inline."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "ae.adcb.bank",
+    "type": "sms-parser",
+    "name": "Abu Dhabi Commercial Bank",
+    "country": "AE",
+    "currency": "AED",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["ADCBAlert"],
+      "dltPatterns": ["^.*ADCB.*$", "^[A-Z]{2}-ADCB-[A-Z]$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "could not be completed",
+        "insufficient funds",
+        "do not share your otp",
+        "otp for transaction",
+        "activation key",
+        "do not share with anyone",
+        "has been de-activated",
+        "has been activated",
+        "congratulations on the first usage",
+        "digital card assigned to",
+        "pin change/setup was successful",
+        "request for pin change/setup",
+        "we have updated your emirates id",
+        "confirmation recd. from",
+        "sr no.",
+        "for clarifications please call",
+        "for assistance please call"
+      ],
+      "requireAnyKeyword": [
+        "your debit card",
+        "your credit card",
+        "was used for",
+        "used for",
+        "withdrawn from",
+        "deposited via atm",
+        "transferred via",
+        "cr. transaction",
+        "dr. transaction",
+        "cr.transaction",
+        "dr.transaction",
+        "touchpoints redemption"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "was used for\\s+[A-Z]{3}\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "used for\\s+[A-Z]{3}\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "\\b[A-Z]{3}\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+withdrawn from"
+        },
+        {
+          "re": "\\b[A-Z]{3}\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+has been deposited via ATM"
+        },
+        {
+          "re": "\\b[A-Z]{3}\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+transferred via"
+        },
+        {
+          "re": "Cr\\. transaction of\\s+[A-Z]{3}\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Dr\\.?\\s*transaction of\\s+[A-Z]{3}\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Transaction of\\s+[A-Z]{3}\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Amount Paid:\\s*[A-Z]{3}\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "at\\s+(?<value>[^,\\n]+),\\s*[A-Z]{2}"
+        },
+        {
+          "re": "\\bat\\s+ATM[-\\s]*(?:\\d+)?(?<value>[A-Za-z][^.\\n]*)"
+        },
+        {
+          "re": "deposited via ATM[^.]*?\\bat\\s+(?<value>[^.\\n]+)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Avl\\.Bal\\s+[A-Z]{3}\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available balance is\\s+(?:[A-Z]{3})?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avl\\.?\\s*bal\\.?\\s+[A-Z]{3}\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avl\\.Bal\\.?[A-Z]{3}(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available Balance is\\s+[A-Z]{3}(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "on\\s+(?<value>\\w{3}\\s+\\d{1,2}\\s+\\d{4}\\s+\\d{1,2}:\\d{2}[AP]M)",
+          "flags": ""
+        },
+        {
+          "re": "(?<value>\\d{2}/\\d{2}/\\d{2}\\s+\\d{2}:\\d{2})",
+          "flags": ""
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "debit card\\s+[X*]+\\d{4}\\s+linked to acc\\.?\\s*[X*]+(?<value>\\d{6})"
+        },
+        {
+          "re": "linked to acc\\.?\\s*[X*]+(?<value>\\d{6})"
+        },
+        {
+          "re": "withdrawn from acc\\.?\\s*[X*]+(?<value>\\d{6})"
+        },
+        {
+          "re": "in your account\\s+[X*]+(?<value>\\d{6})"
+        },
+        {
+          "re": "from acc\\.?\\s*no\\.?\\s*[X*]+(?<value>\\d{6})"
+        },
+        {
+          "re": "account (?:number\\s*)?[X*]+(?<value>\\d{6})"
+        },
+        {
+          "re": "on your account number\\s+[X*]+(?<value>\\d{6})"
+        },
+        {
+          "re": "debit card\\s+[X*]+\\d{4}\\s+linked to acc\\.?\\s*[X*]+(?<value>\\d{4})"
+        },
+        {
+          "re": "withdrawn from acc\\.?\\s*[X*]+(?<value>\\d{4})"
+        },
+        {
+          "re": "in your account\\s+[X*]+(?<value>\\d{4})"
+        },
+        {
+          "re": "from acc\\.?\\s*no\\.?\\s*[X*]+(?<value>\\d{4})"
+        },
+        {
+          "re": "account (?:number\\s*)?[X*]+(?<value>\\d{4})"
+        },
+        {
+          "re": "Card\\s+[X*]+(?<value>\\d{4})"
+        },
+        {
+          "re": "Card\\s+No\\s+(?<value>[X\\d]{4})"
+        },
+        {
+          "re": "Account\\s+[X*]+(?<value>\\d{4})"
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": [
+        "was used for",
+        "used for",
+        "withdrawn from",
+        "dr. transaction",
+        "dr.transaction",
+        "touchpoints redemption"
+      ],
+      "income": ["deposited via atm", "cr. transaction", "cr.transaction"],
+      "transfer": ["transferred via"]
+    },
+    "cardRules": {
+      "includeKeywords": ["used for"],
+      "excludeKeywords": []
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["touchpoints redemption"],
+          "notContainsAny": ["used for"]
+        },
+        "field": "merchant",
+        "value": "TouchPoints Redemption"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["transferred via"],
+          "notContainsAny": ["used for"]
+        },
+        "field": "merchant",
+        "value": "Transfer via ADCB Banking"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["cr. transaction"],
+          "notContainsAny": ["used for"]
+        },
+        "field": "merchant",
+        "value": "Account Credit"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["dr. transaction"],
+          "notContainsAny": ["used for"]
+        },
+        "field": "merchant",
+        "value": "Account Debit"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "debit card purchase (AED)",
+      "sender": "ADCBAlert",
+      "receivedAt": "2024-07-10T17:49:00.000Z",
+      "body": "Your debit card XXX1234 linked to acc. XXX810001 was used for AED100.50 on Jul 10 2024  5:49PM at MERCHANT123,AE. Avl.Bal AED 200.75.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100.50",
+          "merchant": "MERCHANT123",
+          "accountLast4": "0001",
+          "balance": "200.75",
+          "reference": "Jul 10 2024  5:49PM",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "debit card purchase (foreign currency, reported in AED)",
+      "sender": "ADCBAlert",
+      "receivedAt": "2024-07-11T13:00:00.000Z",
+      "body": "Your debit card XXX1234 linked to acc. XXX810001 was used for USD50.25 on Jul 11 2024  1:00PM at ONLINEPLATFORM,GE. Avl.Bal AED 150.50.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "50.25",
+          "merchant": "ONLINEPLATFORM",
+          "accountLast4": "0001",
+          "balance": "150.50",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "debit card purchase with spaced merchant (THB)",
+      "sender": "ADCBAlert",
+      "receivedAt": "2025-06-16T17:02:00.000Z",
+      "body": "Your debit card XXX0830 linked to acc. XXX810001 was used for THB28.25 on Jun 16 2025  5:02PM at SHOPPING MALL,TH. Avl.Bal AED 321.56.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "28.25",
+          "merchant": "SHOPPING MALL",
+          "accountLast4": "0001",
+          "balance": "321.56",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "atm deposit",
+      "sender": "ADCBAlert",
+      "receivedAt": "2025-01-16T16:56:00.000Z",
+      "body": "AED5000.00 has been deposited via ATM in your account XXX810001 on Jan 16 2025 16:56 at LOCATION123. Available Balance is AED5200.25.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "merchant": "LOCATION123",
+          "accountLast4": "0001",
+          "balance": "5200.25",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "bank transfer",
+      "sender": "ADCBAlert",
+      "receivedAt": "2025-02-04T12:49:00.000Z",
+      "body": "AED750.50 transferred via ADCB Personal Internet Banking / Mobile App from acc. no. XXX810001 on Feb  4 2025 12:49PM. Avl. bal. AED 2000.00.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "750.50",
+          "merchant": "Transfer via ADCB Banking",
+          "accountLast4": "0001",
+          "balance": "2000.00",
+          "reference": "Feb  4 2025 12:49PM",
+          "transactionType": "TRANSFER"
+        }
+      }
+    },
+    {
+      "name": "account credit",
+      "sender": "ADCBAlert",
+      "receivedAt": "2025-03-01T10:00:00.000Z",
+      "body": "A Cr. transaction of AED 200.00 on your account number XXX810001 was successful.Available balance is AED 220.25.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "200.00",
+          "merchant": "Account Credit",
+          "accountLast4": "0001",
+          "balance": "220.25",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "account debit",
+      "sender": "ADCBAlert",
+      "receivedAt": "2025-03-02T10:00:00.000Z",
+      "body": "A Dr. transaction of AED 2.10 on your account number XXX810001 was successful.Available balance is 13697.16.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2.10",
+          "merchant": "Account Debit",
+          "accountLast4": "0001",
+          "balance": "13697.16",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal (AED)",
+      "sender": "ADCBAlert",
+      "receivedAt": "2025-01-08T15:07:00.000Z",
+      "body": "AED1500.50 withdrawn from acc. XXX810001 on Jan 8 2025 3:07PM at ATM-BANK123. Avl.Bal.AED1200.75. Be cautious with large amt. of cash.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1500.50",
+          "merchant": "BANK123",
+          "accountLast4": "0001",
+          "balance": "1200.75",
+          "reference": "Jan 8 2025 3:07PM",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal with numeric atm id (GBP)",
+      "sender": "ADCBAlert",
+      "receivedAt": "2024-12-24T23:14:00.000Z",
+      "body": "GBP4500.75 withdrawn from acc. XXX810001 on Dec 24 2024 11:14PM at ATM-123456LOCATION123. Avl.Bal.AED250.25. Be cautious with large amt. of cash.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "4500.75",
+          "merchant": "LOCATION123",
+          "accountLast4": "0001",
+          "balance": "250.25",
+          "reference": "Dec 24 2024 11:14PM",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "touchpoints redemption",
+      "sender": "ADCBAlert",
+      "receivedAt": "2025-06-11T15:58:58.000Z",
+      "body": "TouchPoints Redemption Request registered successfully on 11-06-2025 15:58:58 Amount Paid: AED 100.00 TouchPoints Remaining: 344.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100.00",
+          "merchant": "TouchPoints Redemption",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "failed transaction is filter-rejected",
+      "sender": "ADCBAlert",
+      "receivedAt": "2024-07-13T00:30:00.000Z",
+      "body": "Transaction of USD 75.50 made on Jul 13, 2024 12:30AM on your Debit Card XXX1234 could not be completed due to insufficient funds. For assistance, please call BANK_HOTLINE",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "ADCBAlert",
+      "receivedAt": "2025-06-16T17:00:00.000Z",
+      "body": "Do not share your OTP with anyone. If not initiated by you, please call BANK_HOTLINE. OTP for transaction at RETAILER for THB 25.00 on your ADCB Debit Car...",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "card de-activation notice is filter-rejected",
+      "sender": "ADCBAlert",
+      "receivedAt": "2025-05-01T09:00:00.000Z",
+      "body": "Your digital card assigned to ADCB Debit Card XXX1234 for PAYMENT_SERVICE has been de-activated. Please call BANK_HOTLINE if you have not initiated this request.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "app activation key is filter-rejected",
+      "sender": "ADCBAlert",
+      "receivedAt": "2025-05-02T09:00:00.000Z",
+      "body": "Activation Key for your ADCB App is ACTIVATION_CODE Valid for 24 hours. Do not share with anyone. If not initiated by you, please call BANK_HOTLINE",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

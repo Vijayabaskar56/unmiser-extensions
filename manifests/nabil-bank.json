@@ -1,0 +1,206 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro NabilBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/NabilBankParser.kt) plus the BankParser base-class fallbacks it relies on (amount Rs/INR/rupee fallbacks, CompiledPatterns.Merchant, the isTransactionMessage skip list). Nabil Bank (Nepal) SMS formats carry no merchant/payee narrative — the Kotlin parser leaves merchant null for these messages — so transaction fixtures land at REVIEW confidence with MISSING_MERCHANT, which mirrors the original behavior faithfully."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "np.nabil.bank",
+    "type": "sms-parser",
+    "name": "Nabil Bank",
+    "country": "NP",
+    "currency": "NPR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["NABIL_ALERT", "NABILBANK", "NABIL"],
+      "dltPatterns": ["^.*NABIL.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "NPR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "Remarks[:\\s]*(?<value>[A-Z0-9\\-~]+)"
+        },
+        {
+          "re": "(?<value>MTXN[0-9A-Z\\-]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "\\b(?:acct|a/c|account|card|ending|last)\\b(?:\\s+(?:no\\.?|number))?[\\s:.#\\-]*(?<value>[0-9]{4,})\\b",
+          "takeLast4": true
+        },
+        {
+          "re": "\\b(?:no\\.?|number)\\b[\\s:.#\\-]*(?<value>[0-9]{4,})\\b",
+          "takeLast4": true
+        },
+        {
+          "re": "(?<![A-Za-z0-9/₹$€£])(?<value>[0-9]{4,})(?![A-Za-z0-9/₹$€£])",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["withdrawn"],
+      "income": ["deposited", "credited"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\([^)]*\\)\\s*$",
+        "\\s+(?:Ref|UPI).*$",
+        "\\s+PVT\\.?\\s+LTD\\.?$",
+        "\\s+LTD\\.?$",
+        "[-\\s]+$"
+      ],
+      "minMerchantLength": 2
+    }
+  },
+  "fixtures": [
+    {
+      "name": "withdrawn example (original test)",
+      "sender": "NABIL_ALERT",
+      "receivedAt": "2026-04-17T07:58:06.000Z",
+      "body": "Dear Customer, Your 091##04118 has been withdrawn by NPR 20,008.00 on 17/04/2026 07:58:06, Remarks: MTXN0000517374-130\nDownload App: https://rebrand.ly/nBank",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "20008.00",
+          "transactionType": "EXPENSE",
+          "accountLast4": "4118",
+          "reference": "MTXN0000517374-130",
+          "currency": "NPR"
+        }
+      }
+    },
+    {
+      "name": "debited body without account context (original test)",
+      "sender": "NABIL_ALERT",
+      "receivedAt": "2026-04-17T07:58:06.000Z",
+      "body": "Dear Customer, NPR 20,008.00 was debited on 17/04/2026 07:58:06, Remarks: MTXN0000517374-130",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_TYPE", "MISSING_MERCHANT"],
+        "fields": {
+          "amount": "20008.00",
+          "reference": "MTXN0000517374-130"
+        }
+      }
+    },
+    {
+      "name": "deposited with explicit account number",
+      "sender": "NABILBANK",
+      "receivedAt": "2026-05-12T10:21:33.000Z",
+      "body": "Dear Customer, Your A/C No. 0123456789 has been deposited by NPR 15,000.00 on 12/05/2026 10:21:33, Remarks: MTXN0000612345-221\nDownload App: https://rebrand.ly/nBank",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "15000.00",
+          "transactionType": "INCOME",
+          "accountLast4": "6789",
+          "reference": "MTXN0000612345-221"
+        }
+      }
+    },
+    {
+      "name": "credited with masked account",
+      "sender": "NABIL_ALERT",
+      "receivedAt": "2026-06-01T12:00:00.000Z",
+      "body": "Dear Customer, Your 222##19405 has been credited by NPR 1,234.00 on 01/06/2026 12:00:00, Remarks: MTXN0000711111-105\nDownload App: https://rebrand.ly/nBank",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "1234.00",
+          "transactionType": "INCOME",
+          "accountLast4": "9405",
+          "reference": "MTXN0000711111-105"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "NABIL_ALERT",
+      "receivedAt": "2026-06-01T09:00:00.000Z",
+      "body": "Your OTP for Nabil SmartBank login is 482913. Do not share it with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

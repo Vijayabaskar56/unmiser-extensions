@@ -1,0 +1,396 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro BankOfIndiaParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/BankOfIndiaParser.kt) plus the BankParser.kt base-class fallbacks it delegates to (generic Rs/INR amount, AC_WITH_MASK account, GENERIC_REF reference, and the combined Bal/Avl Bal balance patterns). The Kotlin type priority (cash deposit -> INCOME, investment keywords, \"debited ... and credited to\" -> EXPENSE, \"credited ... and debited from\" -> INCOME) is reproduced with pipeline setFieldWhen steps ordered lowest-priority-first so later steps override."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.boi.bank",
+    "type": "sms-parser",
+    "name": "Bank of India",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["BOIIND", "BOIBNK"],
+      "dltPatterns": [
+        "^[A-Z]{2}-BOIIND-[ST]$",
+        "^[A-Z]{2}-BOIBNK-[ST]$",
+        "^[A-Z]{2}-BOI-[ST]$",
+        "^[A-Z]{2}-BOIIND$",
+        "^[A-Z]{2}-BOIBNK$",
+        "^[A-Z]{2}-BOI$",
+        "^BK-BOIIND.*$",
+        "^JD-BOIIND.*$"
+      ]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "will be",
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "is due",
+        "ignore if paid",
+        "ignore if already paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)\\s+(?:debited|credited)"
+        },
+        {
+          "re": "INR\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)\\s+(?:debited|credited)"
+        },
+        {
+          "re": "withdrawn\\s+Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "credited\\s+to\\s+(?<value>[^.\\n]+?)(?:\\s+via|\\s+Ref|\\s+on|$)"
+        },
+        {
+          "re": "debited\\s+from\\s+(?<value>[^.\\n]+?)(?:\\s+via|\\s+Ref|\\s+on|$)"
+        },
+        {
+          "re": "(?:ATM|withdrawn)\\s+(?:at\\s+)?(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref|$)"
+        },
+        {
+          "re": "towards\\s+(?<value>[^.\\n]+?)(?:\\s+via|\\s+Ref|\\s+on|$)"
+        },
+        {
+          "re": "\\bto\\s+(?<value>[^.\\n]+?)(?:\\s+via|\\s+Ref|\\s+on|$)"
+        },
+        {
+          "re": "\\bfrom\\s+(?<value>[^.\\n]+?)(?:\\s+via|\\s+Ref|\\s+on|$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Bal[:\\s]+Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+Balance[:\\s]+Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avl\\s+Bal[:\\s]+Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+Rs\\.?\\s*(?<value>\\d+(?:,\\d{3})*(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "Ref\\s+No\\.?\\s*(?<value>\\d+)"
+        },
+        {
+          "re": "Reference[:\\s]+(?<value>\\w+)"
+        },
+        {
+          "re": "Txn\\s*(?:ID|#)[:\\s]*(?<value>\\w+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>\\d+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "A/c\\s*(?:XX|X\\*+)?(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:Account|A/c)\\s+ending\\s+(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "A/c\\s+No\\.?\\s*(?:XX|X\\*+)?(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+[Xx*]*(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["credited", "deposited", "received", "refund", "cashback"]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s*-\\s*Autopa.*$", "\\s+PVT\\.?\\s+LTD\\.?$", "\\s+LTD\\.?$"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "extractFieldWhen",
+        "when": {
+          "containsAll": ["mandate", "towards"]
+        },
+        "field": "merchant",
+        "extractors": [
+          {
+            "re": "via\\s+(?<value>[A-Za-z0-9]+)"
+          },
+          {
+            "re": "towards\\s+(?<value>[^,\\n]+?)(?:\\s+for|\\s*,|$)"
+          }
+        ]
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["cash acceptor machine"]
+        },
+        "field": "merchant",
+        "value": "Cash Deposit"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["cash", "deposited"]
+        },
+        "field": "merchant",
+        "value": "Cash Deposit"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["credited", "and debited from"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["debited", "and credited to"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": [
+            "iccl",
+            "indian clearing corporation",
+            "nsccl",
+            "nse clearing",
+            "clearing corporation",
+            "nach",
+            "ach",
+            "ecs",
+            "groww",
+            "zerodha",
+            "upstox",
+            "kite",
+            "kuvera",
+            "paytm money",
+            "etmoney",
+            "coin by zerodha",
+            "smallcase",
+            "angel one",
+            "angel broking",
+            "5paisa",
+            "icici securities",
+            "icici direct",
+            "hdfc securities",
+            "kotak securities",
+            "motilal oswal",
+            "sharekhan",
+            "edelweiss",
+            "axis direct",
+            "sbi securities",
+            "mutual fund",
+            "sip",
+            "elss",
+            "ipo",
+            "folio",
+            "demat",
+            "stockbroker",
+            "digital gold",
+            "sovereign gold",
+            "nse",
+            "bse",
+            "cdsl",
+            "nsdl"
+          ]
+        },
+        "field": "transactionType",
+        "value": "INVESTMENT"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["deposited in your account"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["cash", "deposited"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "cash deposit via cash acceptor machine",
+      "sender": "JM-BOIIND-S",
+      "receivedAt": "2025-10-14T10:30:00.000Z",
+      "body": "BOI -  Cash Rs. 500 deposited in your account XX5468 from Cash Acceptor Machine R0807030 at  MAIN TRIMBAK ROAD ON 14-10-2025. Available balance Rs. 20100.81",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500",
+          "merchant": "Cash Deposit",
+          "accountLast4": "5468",
+          "balance": "20100.81",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "cash deposit variant with direct sender id",
+      "sender": "BOIIND",
+      "receivedAt": "2025-10-14T11:00:00.000Z",
+      "body": "BOI -  Cash Rs. 500 deposited in your account XX5468 from Cash Acceptor Machine R0807030 at  MAIN ROAD ON 14-10-2025. Available balance Rs. 15000.50",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500",
+          "merchant": "Cash Deposit",
+          "accountLast4": "5468",
+          "balance": "15000.50",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "upi debit with credited-to counterparty",
+      "sender": "JM-BOIIND-S",
+      "receivedAt": "2025-08-23T09:15:00.000Z",
+      "body": "Rs.200.00 debited A/cXX5468 and credited to SAI MISAL via UPI Ref No 315439383341 on 23Aug25. Call 18001031906, if not done by you. -BOI",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "200.00",
+          "merchant": "SAI MISAL",
+          "accountLast4": "5468",
+          "reference": "315439383341",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "upi credit with debited-from counterparty",
+      "sender": "JD-BOIIND-S",
+      "receivedAt": "2025-08-24T13:45:00.000Z",
+      "body": "Rs.1500.00 credited A/cXX5468 and debited from RAHUL SHARMA via UPI Ref No 415439383342 on 24Aug25. Call 18001031906, if not done by you. -BOI",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1500.00",
+          "merchant": "RAHUL SHARMA",
+          "accountLast4": "5468",
+          "reference": "415439383342",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal with location",
+      "sender": "BK-BOIIND-S",
+      "receivedAt": "2025-09-12T08:20:00.000Z",
+      "body": "Rs.500.00 withdrawn at ATM MAIN ROAD NASHIK on 12-09-25 from A/c XX5468. Avl Bal Rs.19600.81. Call 18001031906 if not done by you -BOI",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "ATM MAIN ROAD NASHIK",
+          "accountLast4": "5468",
+          "balance": "19600.81",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "upi mandate execution classified as investment with platform merchant",
+      "sender": "JM-BOIIND-S",
+      "receivedAt": "2025-09-05T05:00:00.000Z",
+      "body": "Rs.5000.00 debited A/cXX5468 towards ICCL - Mutual Funds - Autopay for Mandate Created via GROWW. Ref No 987654321012. Call 18001031906, if not done by you. -BOI",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "merchant": "GROWW",
+          "accountLast4": "5468",
+          "reference": "987654321012",
+          "transactionType": "INVESTMENT"
+        }
+      }
+    },
+    {
+      "name": "future mandate debit alert is filter-rejected",
+      "sender": "JM-BOIIND-S",
+      "receivedAt": "2025-08-25T04:00:00.000Z",
+      "body": "Rs.5000.00 will be debited from A/cXX5468 towards ICCL - Mutual Funds - Autopay Mandate via GROWW on 25Aug25. -BOI",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "BOIIND",
+      "receivedAt": "2025-08-26T12:00:00.000Z",
+      "body": "Your OTP for Bank of India net banking is 482910 valid for 10 mins. Do not share it with anyone. -BOI",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,475 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro UAEBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/UAEBankParser.kt) plus the BankParser.kt base-class fallbacks it delegates to via super.*: CompiledPatterns.Amount/Merchant/Reference/Account/Balance, the available limit patterns, and the base isTransactionMessage skip list. UAEBankParser is an ABSTRACT base class in Kotlin (no canHandle/senders); its concrete subclasses EmiratesNBDParser and LivBankParser are ported as separate manifests. This manifest captures the shared UAE behavior as a generic fallback, so dispatch senders are synthesized placeholders. Transaction-type classification is done entirely in the pipeline (not typeRules) because the Kotlin when-chain has interleaved priorities (e.g. \"cheque credited\" INCOME outranks \"cheque returned\" EXPENSE, and \"funds transfer request\" TRANSFER outranks \"has been processed\" EXPENSE) that the engine's fixed investment>credit>expense>income>transfer typeRules order cannot express. The setFieldWhen steps run in REVERSE Kotlin priority order so each later (higher-priority) match overwrites earlier ones, reproducing Kotlin's first-match-wins when-chain."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "ae.uae.bank",
+    "type": "sms-parser",
+    "name": "UAE Bank",
+    "country": "AE",
+    "currency": "AED",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["UAEBANK", "UAE-BANK"],
+      "dltPatterns": ["^[A-Z]{2}-UAEBNK.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid",
+        "purchase",
+        "remittance",
+        "deposit",
+        "withdrawal",
+        "payment",
+        "funds transfer",
+        "cheque",
+        "processed",
+        "debit",
+        "credit"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?:purchase of|transfer of|amount|for|of)\\s+(?!JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]{3}\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "\\b(?!JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]{3}\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "\\b(?!JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]{3}\\s+\\*+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        },
+        {
+          "re": "Reference\\s+Number[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account).*?(?<value>\\d+)(?:\\s|$)",
+          "takeLast4": true
+        }
+      ],
+      "creditLimit": [
+        {
+          "re": "Available\\s+limit\\s+Rs\\.(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avl\\s+Lmt:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Avail\\s+Limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Available\\s+Credit\\s+Limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:^|\\s)Limit:?\\s*Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ]
+    },
+    "cardRules": {
+      "excludeKeywords": [
+        "a/c",
+        "account",
+        "ac ",
+        "acc ",
+        "saving account",
+        "current account",
+        "savings a/c",
+        "current a/c"
+      ],
+      "includeKeywords": [
+        "card ending",
+        "card xx",
+        "debit card",
+        "credit card",
+        "card no.",
+        "card number",
+        "card *",
+        "card x",
+        "ending"
+      ]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*$",
+        "\\s+on\\s+\\d{2}.*$",
+        "\\s+UPI.*$",
+        "\\s+at\\s+\\d{2}:\\d{2}.*$",
+        "\\s*-\\s*$",
+        "(\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(\\s+LTD\\.?|\\s+LIMITED)$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credited", "deposited", "received", "refund"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["cashback"],
+          "notContainsAny": ["earn cashback"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": [
+            "debited",
+            "withdrawn",
+            "spent",
+            "charged",
+            "paid",
+            "purchase",
+            "deducted"
+          ]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["payment"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["purchase"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["debit"],
+          "notContainsAny": ["credit"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["credit"],
+          "notContainsAny": ["credit card", "debit", "purchase", "payment"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["has been processed"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["funds transfer request"]
+        },
+        "field": "transactionType",
+        "value": "TRANSFER"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["payment instructions"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["outward remittance"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["is credited"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["has been credited"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["cash deposit"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["inward remittance"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["atm", "withdrawn"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["atm cash withdrawal"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["cheque returned"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["cheque credited"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credit card purchase", "debit card purchase"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credit card purchase"]
+        },
+        "field": "transactionType",
+        "value": "CREDIT"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "debit card purchase with merchant and card last4",
+      "sender": "UAEBANK",
+      "receivedAt": "2026-05-12T09:15:00.000Z",
+      "body": "Debit Card Purchase of AED 250.75 at CARREFOUR DUBAI on 12/05/26 using Card XXXX4521. Avl Bal: AED 3,749.25",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "250.75",
+          "merchant": "CARREFOUR DUBAI",
+          "accountLast4": "4521",
+          "transactionType": "EXPENSE",
+          "isFromCard": true,
+          "currency": "AED"
+        }
+      }
+    },
+    {
+      "name": "credit card purchase classified as CREDIT",
+      "sender": "AD-UAEBNK-S",
+      "receivedAt": "2026-05-15T18:42:00.000Z",
+      "body": "Credit Card Purchase of AED 89.00 at NOON DUBAI on 15/05/2026 using Credit Card ending 8842.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "89.00",
+          "merchant": "NOON DUBAI",
+          "transactionType": "CREDIT",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "inward remittance credited to account",
+      "sender": "UAEBANK",
+      "receivedAt": "2026-06-01T06:00:00.000Z",
+      "body": "Inward remittance of AED 5,000.00 received from JOHN SMITH on 01/06/2026 credited to Account XX9921. Avl Balance: 12,500.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "merchant": "JOHN SMITH",
+          "accountLast4": "9921",
+          "balance": "12500.00",
+          "transactionType": "INCOME",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "funds transfer request outranks has been processed",
+      "sender": "UAEBANK",
+      "receivedAt": "2026-06-03T11:30:00.000Z",
+      "body": "Your funds transfer request of AED 1,200.00 has been processed. Debit from Account 887766. Ref TXN998877",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1200.00",
+          "accountLast4": "7766",
+          "reference": "TXN998877",
+          "transactionType": "TRANSFER",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "atm cash withdrawal from account",
+      "sender": "UAE-BANK",
+      "receivedAt": "2026-06-05T14:10:00.000Z",
+      "body": "ATM Cash Withdrawal of AED 300.00 at ADCB ATM DEIRA on 05/06/2026 from A/c XX1234. Avl Bal: 1,750.50",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "300.00",
+          "merchant": "ADCB ATM DEIRA",
+          "accountLast4": "1234",
+          "balance": "1750.50",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "UAEBANK",
+      "receivedAt": "2026-05-01T08:00:00.000Z",
+      "body": "Your OTP for AED 500.00 funds transfer is 445566. One Time Password expires in 5 minutes. Do not share it with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

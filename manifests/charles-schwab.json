@@ -1,0 +1,299 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro CharlesSchwabParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/CharlesSchwabParser.kt). Charles Schwab alerts are terse \"A $X <kind> transaction was debited from account ending NNNN\" messages: every alert is an EXPENSE, there is no merchant in the SMS body (the original parser leaves merchant null), and the trailing \"Reply STOP to end Schwab Text Alerts\" must not trip the promo/STOP filter. The original does dynamic currency detection from symbols/ISO codes ($, €, £, ฿, \"A CAD 85.75 ...\"); the manifest engine has a fixed per-manifest currency, so foreign-currency amounts still parse but are reported with the manifest's USD currency (deviation noted in fixtures)."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "us.schwab.bank",
+    "type": "sms-parser",
+    "name": "Charles Schwab",
+    "country": "US",
+    "currency": "USD",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["SCHWAB", "24465"],
+      "dltPatterns": ["^[A-Z]{2}-SCHWAB-[A-Z]$", "^.*CHARLES SCHWAB.*$", "^.*SCHWAB BANK.*$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "is overdue"
+      ],
+      "requireAnyKeyword": [
+        "debit card transaction was debited",
+        "atm transaction was debited",
+        "ach was debited",
+        "transaction was debited from account",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "A\\s+\\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+debit card transaction"
+        },
+        {
+          "re": "A\\s+\\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+ATM transaction"
+        },
+        {
+          "re": "A\\s+\\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+ACH\\s+transaction"
+        },
+        {
+          "re": "A\\s+\\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+ACH\\s+was debited"
+        },
+        {
+          "re": "A\\s+\\$(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+(?:debit card|ATM)\\s+transaction"
+        },
+        {
+          "re": "A\\s+(?:€|£|₹|¥|฿|₩|ብር)\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+debit card transaction"
+        },
+        {
+          "re": "A\\s+(?:€|£|₹|¥|฿|₩|ብር)\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+ATM transaction"
+        },
+        {
+          "re": "A\\s+(?:€|£|₹|¥|฿|₩|ብር)\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+ACH\\s+transaction"
+        },
+        {
+          "re": "A\\s+(?:€|£|₹|¥|฿|₩|ብር)\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+ACH\\s+was debited"
+        },
+        {
+          "re": "A\\s+(?:€|£|₹|¥|฿|₩|ብር)\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+(?:debit card|ATM)\\s+transaction"
+        },
+        {
+          "re": "A\\s+[A-Z]{3}\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+debit card transaction"
+        },
+        {
+          "re": "A\\s+[A-Z]{3}\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+ATM transaction"
+        },
+        {
+          "re": "A\\s+[A-Z]{3}\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+ACH\\s+transaction"
+        },
+        {
+          "re": "A\\s+[A-Z]{3}\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)\\s+ACH\\s+was debited"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "account ending (?<value>\\d{4})"
+        },
+        {
+          "re": "account.*ending (?<value>\\d{4})"
+        },
+        {
+          "re": "from account ending (?<value>\\d{4})"
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": [
+        "debit card transaction",
+        "atm transaction",
+        "ach transaction",
+        "ach was debited",
+        "was debited",
+        "transaction was debited"
+      ]
+    },
+    "cardRules": {
+      "includeKeywords": ["debit card transaction", "atm transaction"],
+      "excludeKeywords": []
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["debit card transaction"]
+        },
+        "field": "merchant",
+        "value": "Debit Card Transaction"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["atm transaction"]
+        },
+        "field": "merchant",
+        "value": "ATM Transaction"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["ach transaction", "ach was debited"]
+        },
+        "field": "merchant",
+        "value": "ACH Transfer"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "debit card transaction",
+      "sender": "SCHWAB",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "A $7.44 debit card transaction was debited from account ending 1234. Reply STOP to end Schwab Text Alerts.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "7.44",
+          "currency": "USD",
+          "transactionType": "EXPENSE",
+          "merchant": "Debit Card Transaction",
+          "accountLast4": "1234",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "atm transaction",
+      "sender": "SCHWAB",
+      "receivedAt": "2026-06-02T18:30:00.000Z",
+      "body": "A $139.71 ATM transaction was debited from account ending 9012. Reply STOP to end Schwab Text Alerts.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "139.71",
+          "currency": "USD",
+          "transactionType": "EXPENSE",
+          "merchant": "ATM Transaction",
+          "accountLast4": "9012",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "ach debit is not card-based",
+      "sender": "SCHWAB",
+      "receivedAt": "2026-06-03T09:15:00.000Z",
+      "body": "A $22.07 ACH was debited from account ending 3456. Reply STOP to end Schwab Text Alerts.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "22.07",
+          "currency": "USD",
+          "transactionType": "EXPENSE",
+          "merchant": "ACH Transfer",
+          "accountLast4": "3456",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "alternative full-name sender",
+      "sender": "CHARLES SCHWAB",
+      "receivedAt": "2026-06-04T12:00:00.000Z",
+      "body": "A $50.25 debit card transaction was debited from account ending 7890. Reply STOP to end Schwab Text Alerts.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "50.25",
+          "transactionType": "EXPENSE",
+          "accountLast4": "7890",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "numeric short-code sender",
+      "sender": "24465",
+      "receivedAt": "2026-06-05T08:45:00.000Z",
+      "body": "A $75.00 debit card transaction was debited from account ending 1357. Reply STOP to end Schwab Text Alerts.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "75.00",
+          "transactionType": "EXPENSE",
+          "accountLast4": "1357",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "dlt route sender",
+      "sender": "US-SCHWAB-A",
+      "receivedAt": "2026-06-06T16:20:00.000Z",
+      "body": "A $15.99 debit card transaction was debited from account ending 2468. Reply STOP to end Schwab Text Alerts.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "15.99",
+          "transactionType": "EXPENSE",
+          "accountLast4": "2468",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "eur symbol amount (currency stays manifest USD)",
+      "sender": "SCHWAB",
+      "receivedAt": "2026-06-07T11:00:00.000Z",
+      "body": "A €25.50 debit card transaction was debited from account ending 2468. Reply STOP to end Schwab Text Alerts.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25.50",
+          "currency": "USD",
+          "transactionType": "EXPENSE",
+          "accountLast4": "2468",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "iso currency-code amount (currency stays manifest USD)",
+      "sender": "SCHWAB",
+      "receivedAt": "2026-06-08T14:10:00.000Z",
+      "body": "A CAD 85.75 debit card transaction was debited from account ending 5432. Reply STOP to end Schwab Text Alerts.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "85.75",
+          "currency": "USD",
+          "transactionType": "EXPENSE",
+          "accountLast4": "5432",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "verification code alert is filter-rejected",
+      "sender": "SCHWAB",
+      "receivedAt": "2026-06-09T07:00:00.000Z",
+      "body": "Your Schwab verification code is 482915. Do not share this code with anyone. Reply STOP to end Schwab Text Alerts.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "stop confirmation without transaction info is filter-rejected",
+      "sender": "SCHWAB",
+      "receivedAt": "2026-06-09T07:05:00.000Z",
+      "body": "You are enrolled in Schwab Text Alerts. Msg&data rates may apply. Reply STOP to end Schwab Text Alerts.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

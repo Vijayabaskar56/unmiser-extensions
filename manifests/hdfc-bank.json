@@ -1,0 +1,228 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro HDFCBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/HDFCBankParser.kt) plus formats observed in real device scans."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.hdfc.bank",
+    "type": "sms-parser",
+    "name": "HDFC Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["HDFC", "HDFCBK", "HDFCBANK", "HDFCB"],
+      "dltPatterns": [
+        "^[A-Z]{2}-HDFCBK.*$",
+        "^[A-Z]{2}-HDFC.*$",
+        "^HDFC-[A-Z]+$",
+        "^[A-Z]{2}-HDFCB.*$"
+      ]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "has requested",
+        "payment request",
+        "collect request",
+        "ignore if already paid",
+        "bill alert",
+        "is due on",
+        "will be debited",
+        "will be deducted",
+        "e-mandate",
+        "offer",
+        "discount",
+        "win ",
+        "card will be disabled",
+        "invalid pin",
+        "not credited"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid",
+        "sent",
+        "deducted",
+        "charged",
+        "txn"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "INR\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "\\bTo\\s+(?<value>[^@\\n]+?)@[^\\s]*\\s+On\\s+\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}"
+        },
+        {
+          "re": "\\bTo\\s+(?<value>.+?)\\s+On\\s+\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}"
+        },
+        {
+          "re": "Info:\\s*(?:UPI/)?(?<value>[^/.\\n]+?)(?:/|\\.|$)"
+        },
+        {
+          "re": "VPA\\s+[^@\\s]+@[^\\s]+\\s*\\((?<value>[^)]+)\\)"
+        },
+        {
+          "re": "SALARY[- ](?<value>[^.\\n]+?)(?:\\s+Info|$)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+by\\s+|\\s+on\\s+|\\.|$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Avl\\s+bal:?\\s*INR\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "Available\\s+Balance:?\\s*INR\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        },
+        {
+          "re": "Bal\\s+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "UPI\\s+Ref\\s+No\\.?\\s*(?<value>\\d{9,})"
+        },
+        {
+          "re": "\\bRef\\s*(?:No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "A/c\\s+(?:[X*]+\\s*)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+x(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "BLOCK\\s+DC\\s+(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "HDFC\\s+Bank\\s+[X*]*(?<value>\\d{4,})",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": ["iccl", "nsccl", "groww", "zerodha", "sip", "mutual fund"],
+      "credit": ["block cc", "block pcc", "spent on card"],
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "sent", "deducted", "txn"],
+      "income": ["credited", "deposited", "received", "refund"]
+    },
+    "cardRules": {
+      "includeKeywords": ["credit card", "debit card", "card x", "block cc", "block pcc"],
+      "excludeKeywords": ["a/c", "account", "hdfc bank a/c"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s+Ref\\s+No.*$",
+        "\\s+UPI.*$",
+        "\\s+PVT\\.?\\s+LTD\\.?$",
+        "\\s+LTD\\.?$"
+      ],
+      "minMerchantLength": 2,
+      "commonWords": ["USING", "VIA", "THROUGH", "TO", "FROM"]
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["Sent Rs", "From HDFC Bank"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "merchant",
+        "value": "ATM"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "upi sent format",
+      "sender": "VM-HDFCBK-S",
+      "receivedAt": "2026-06-09T10:05:00.000Z",
+      "body": "Sent Rs.250.00 From HDFC Bank A/C *1234 To tea stall@upi On 09/06/26 Ref 987654.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "250.00",
+          "merchant": "tea stall",
+          "accountLast4": "1234",
+          "transactionType": "EXPENSE",
+          "reference": "987654"
+        }
+      }
+    },
+    {
+      "name": "balance debit",
+      "sender": "VM-HDFCBK-S",
+      "receivedAt": "2026-06-09T10:06:00.000Z",
+      "body": "Rs.1250.00 debited from HDFC Bank A/c XX1234 at AMAZON on 09/06/26. Avl bal:INR 88,750.20",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1250.00",
+          "merchant": "AMAZON",
+          "balance": "88750.20",
+          "accountLast4": "1234",
+          "transactionType": "EXPENSE"
+        }
+      }
+    },
+    {
+      "name": "upi sent lowercase-x account with payee name and Not You suffix",
+      "sender": "VM-HDFCBK-S",
+      "receivedAt": "2026-06-09T10:07:00.000Z",
+      "body": "Sent Rs.36.00 From HDFC Bank A/C x9012 To Corner Coffee Bar On 24/12/24 Ref 435959487717 Not You? Call 18002586161/SMS BLOCK UPI to 7308080808",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "36.00",
+          "merchant": "Corner Coffee Bar",
+          "accountLast4": "9012",
+          "transactionType": "EXPENSE",
+          "reference": "435959487717"
+        }
+      }
+    },
+    {
+      "name": "cheque debit update with Info merchant and no A/c prefix",
+      "sender": "VM-HDFCBN-S",
+      "receivedAt": "2026-06-09T10:08:00.000Z",
+      "body": "UPDATE: INR 2,00,000.00 debited from HDFC Bank XX9012 on 12-DEC-24. Info: SELF - CHQ PAID - CITY ROAD. Avl bal:INR 8,935.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "200000.00",
+          "accountLast4": "9012",
+          "transactionType": "EXPENSE",
+          "balance": "8935.00"
+        }
+      }
+    }
+  ]
+}

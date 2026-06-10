@@ -1,0 +1,274 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro AUBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/AUBankParser.kt, extends BaseIndianBankParser -> BankParser). Covers the four AU Small Finance Bank formats the Kotlin parser handles: \"Debited INR X from A/c\" debits with a UPI/DR/ref/MERCHANT/IFSC/acct line, \"Credited INR X to A/c\" credits (UPI/CR and \"Ref UPI/.../name(vpa)\" variants), \"INR X spent at MERCHANT on AU Bank Credit Card xNNNN\" card spends, and \"withdrawn INR X\" ATM withdrawals. Base BankParser fallbacks (CompiledPatterns Amount / Merchant / Balance / Reference / Account) are appended after each AU pattern in the original super.extractX() priority order."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.au.bank",
+    "type": "sms-parser",
+    "name": "AU Small Finance Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["AUBANK"],
+      "dltPatterns": ["AUBANK"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "one time password", "verification code"],
+      "requireAnyKeyword": [
+        "credited inr",
+        "debited inr",
+        "withdrawn inr",
+        "bal inr",
+        "ref upi",
+        "spent",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Credited\\s+INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+to"
+        },
+        {
+          "re": "Debited\\s+INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+from"
+        },
+        {
+          "re": "INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+spent"
+        },
+        {
+          "re": "withdrawn\\s+INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "spent\\s+at\\s+(?<value>.+?)\\s+on\\s+(?:AU\\s+Bank|$)"
+        },
+        {
+          "re": "UPI/(?:DR|CR)/\\d+/(?<value>[^/]+)/[A-Z]{4}\\d*/\\d+"
+        },
+        {
+          "re": "Ref\\s+UPI/[^/]+/[^/]+/[^/]+\\s+(?<value>[^(]+)\\([^)]+\\)"
+        },
+        {
+          "re": "UPI/[^/]+/[^/]+/[^/]+\\s+[^(]*\\((?<value>[^)]+)\\)"
+        },
+        {
+          "re": "(?:to|from)\\s+(?<value>(?:(?!A/c)[^.\\n])+?)(?:\\.\\s|\\.$|$)"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Bal\\s+INR\\s+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl\\s+Bal|Available\\s+Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl\\s+Bal|Available\\s+Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl\\s+Bal|Available\\s+Balance)[:\\s]+₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl\\s+Bal|Available\\s+Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated\\s+Balance|Remaining\\s+Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        },
+        {
+          "re": "Reference\\s+Number[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx\\*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx\\*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account).*?(?<value>\\d+)(?:\\s|$)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Card)\\s*[A-Za-z]*[Xx\\*]*(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "credit": ["credit card"],
+      "expense": ["debited", "withdrawn", "spent", "paid", "charged", "purchase", "deducted"],
+      "income": ["credited", "received", "deposited", "refund", "cashback"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*",
+        "\\s+on\\s+\\d{2}.*",
+        "\\s+UPI.*",
+        "\\s+at\\s+\\d{2}:\\d{2}.*",
+        "\\s*-\\s*$",
+        "(?:\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(?:\\s+LTD\\.?|\\s+LIMITED)$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["atm", "withdrawn"]
+        },
+        "field": "merchant",
+        "value": "ATM Withdrawal"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credited", "received", "deposited", "refund"],
+          "notContainsAny": ["credit card"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "upi debit with DR narrative",
+      "sender": "VM-AUBANK",
+      "receivedAt": "2026-03-01T10:15:00.000Z",
+      "body": "Debited INR 165.00 from A/c X7013 on 01-MAR-2026\nUPI/DR/651122781360/UK FOOD/UTIB/9180201\nBal INR 900000000\nNot you? Call 180012001200 & dial 0\n-AU Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "165.00",
+          "merchant": "UK FOOD",
+          "accountLast4": "7013",
+          "balance": "900000000",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "basic debit without UPI",
+      "sender": "VM-AUBANK",
+      "receivedAt": "2026-02-15T09:00:00.000Z",
+      "body": "Debited INR 500.00 from A/c 1234567890 on 15-FEB-2026. Bal INR 10000.00. -AU Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500.00",
+          "merchant": "A/c 1234567890",
+          "accountLast4": "7890",
+          "balance": "10000.00",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "credit card spend",
+      "sender": "VM-AUBANK",
+      "receivedAt": "2026-03-21T12:19:40.000Z",
+      "body": "INR 259.90 spent at TELEGRAM PREMIUM on AU Bank Credit Card x1234 21-03-2026 05:49:40 PM. Not you? Call 180012001500 or SMS PBLOCK 1234 to 5676767",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "259.90",
+          "merchant": "TELEGRAM PREMIUM",
+          "accountLast4": "1234",
+          "transactionType": "CREDIT",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "upi credit with CR narrative",
+      "sender": "AD-AUBANK-S",
+      "receivedAt": "2026-04-02T08:30:00.000Z",
+      "body": "Credited INR 5000.00 to A/c X7013 on 02-APR-2026\nUPI/CR/512345678901/RAHUL SHARMA/ICIC/9912345\nBal INR 15000.00\nNot you? Call 180012001200 & dial 0\n-AU Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "merchant": "RAHUL SHARMA",
+          "accountLast4": "7013",
+          "balance": "15000.00",
+          "transactionType": "INCOME",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "atm withdrawal",
+      "sender": "VM-AUBANK",
+      "receivedAt": "2026-04-05T14:00:00.000Z",
+      "body": "Withdrawn INR 2000.00 from A/c X7013 at AU Bank ATM on 05-04-2026. Avl Bal INR 8000.00 -AU Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2000.00",
+          "merchant": "ATM Withdrawal",
+          "accountLast4": "7013",
+          "balance": "8000.00",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "VM-AUBANK",
+      "receivedAt": "2026-04-10T11:00:00.000Z",
+      "body": "Your OTP for AU Bank Netbanking login is 482913. Valid for 10 mins. Do not share it with anyone. -AU Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

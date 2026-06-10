@@ -1,0 +1,146 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro KeralaGraminBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/KeralaGraminBankParser.kt) Two known formats, both UPI: - debit: \"Your a/c no. XXXX12345 is debited for Rs.160.00 on ... and credited to a/c no. XXXXX00019 (UPI Ref no 170632692557)\" -> merchant \"UPI Transfer\" - credit: \"Dear Customer, Account XXXX123 is credited with INR 3000 on ... from 7025784485@upi. UPI Ref. no. 529807237409\" -> merchant is the VPA local part, or \"UPI Payment\" when the local part is a bare phone number."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.keralagramin.bank",
+    "type": "sms-parser",
+    "name": "Kerala Gramin Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["KGBANK", "AD-KGBANK-S", "BX-KGBANK-S"],
+      "dltPatterns": ["^.*KGBANK.*$", "^.*KERALA GRAMIN.*$", "^.*KERALAGR.*$"]
+    },
+    "filter": {
+      "excludeKeywords": ["otp", "password"],
+      "requireAnyKeyword": ["debited for", "is debited", "credited with", "is credited"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?:debited for|credited with)\\s+(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.[0-9]{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "from\\s+(?<value>[^.\\s@]*[A-Za-z][^.\\s@]*)@[a-z]+"
+        }
+      ],
+      "reference": [
+        {
+          "re": "UPI Ref\\.?\\s*no\\.?\\s*(?<value>\\d+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:a/c no\\.|Account)\\s+(?:XXXX|XX)(?<value>\\d{3,5})",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["debited for", "is debited"],
+      "income": ["credited with", "is credited"]
+    },
+    "cleaning": {
+      "stripPatterns": ["\\s*-\\s*$", "\\s+PVT\\.?\\s+LTD\\.?$", "\\s+LTD\\.?$"],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAll": ["debited", "credited to"]
+        },
+        "field": "merchant",
+        "value": "UPI Transfer"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "merchant",
+        "value": "UPI Payment"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "upi debit transfer",
+      "sender": "AD-KGBANK-S",
+      "receivedAt": "2025-07-28T17:06:00.000Z",
+      "body": "Your a/c no. XXXX12345 is debited for Rs.160.00 on 28/7/25 05:06 PM and credited to a/c no. XXXXX00019 (UPI Ref no 170632692557)-Kerala Gramin Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "160.00",
+          "merchant": "UPI Transfer",
+          "accountLast4": "2345",
+          "transactionType": "EXPENSE",
+          "reference": "170632692557"
+        }
+      }
+    },
+    {
+      "name": "upi credit from phone number",
+      "sender": "BX-KGBANK-S",
+      "receivedAt": "2025-10-20T08:15:26.000Z",
+      "body": "Dear Customer, Account XXXX123 is credited with INR 3000 on 20-10-2025 08:15:26 from 7025784485@upi. UPI Ref. no. 529807237409-Kerala Gramin Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "3000",
+          "merchant": "UPI Payment",
+          "accountLast4": "123",
+          "transactionType": "INCOME",
+          "reference": "529807237409"
+        }
+      }
+    },
+    {
+      "name": "upi credit from named vpa",
+      "sender": "AD-KGBANK-S",
+      "receivedAt": "2025-10-15T10:30:00.000Z",
+      "body": "Dear Customer, Account XXXX5678 is credited with INR 500 on 15-10-2025 10:30:00 from merchant@paytm. UPI Ref. no. 123456789012-Kerala Gramin Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "500",
+          "merchant": "merchant",
+          "accountLast4": "5678",
+          "transactionType": "INCOME",
+          "reference": "123456789012"
+        }
+      }
+    },
+    {
+      "name": "larger upi debit with comma amount",
+      "sender": "BX-KGBANK-S",
+      "receivedAt": "2025-08-01T15:15:00.000Z",
+      "body": "Your a/c no. XXXX9876 is debited for Rs.1,250.50 on 01/8/25 03:15 PM and credited to a/c no. XXXXX11111 (UPI Ref no 987654321098)-Kerala Gramin Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1250.50",
+          "merchant": "UPI Transfer",
+          "accountLast4": "9876",
+          "transactionType": "EXPENSE",
+          "reference": "987654321098"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "AD-KGBANK-S",
+      "receivedAt": "2025-09-10T09:00:00.000Z",
+      "body": "Dear Customer, your OTP for Kerala Gramin Bank net banking login is 482913. Do not share this OTP or password with anyone.-Kerala Gramin Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

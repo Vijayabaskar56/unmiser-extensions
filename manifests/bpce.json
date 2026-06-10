@@ -1,0 +1,181 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro BPCEParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/BPCEParser.kt). BPCE (Banque Populaire Caisse d'Épargne, France) sends from the short code \"38015\". The known format is the \"virement instantané\" (instant transfer) confirmation: \"... réalisation de votre virement instantané de 1000,00 EUR du 01/12/2025 à 00h00m00s vers NAME FIRST NAME\". French uses a comma as the decimal separator, which the engine cannot re-normalize to a dot (it strips commas from amounts as Indian thousands separators). The amount extractors therefore capture only the whole-euro part before the comma — exact for \",00\" amounts (all known fixtures), lossy (centimes dropped) for non-zero centimes. Dot-decimal variants are matched losslessly by the first extractor alternative."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "fr.bpce.bank",
+    "type": "sms-parser",
+    "name": "BPCE",
+    "country": "FR",
+    "currency": "EUR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["38015"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "ajout d'un bénéficiaire",
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "virement instantané",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "de\\s+(?<value>\\d+\\.\\d{2})\\s+EUR"
+        },
+        {
+          "re": "de\\s+(?<value>\\d+),\\d{2}\\s+EUR"
+        },
+        {
+          "re": "de\\s+(?<value>\\d+)\\s+EUR"
+        },
+        {
+          "re": "(?<value>\\d+\\.\\d{2})\\s*EUR"
+        },
+        {
+          "re": "(?<value>\\d+),\\d{2}\\s*EUR"
+        },
+        {
+          "re": "(?<value>\\d+)\\s*EUR"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "vers\\s+(?<value>[^.\\n]+?)(?:\\s+du\\s+|\\s+le\\s+|$)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "\\b(?:ref|référence)\\s*[:.]?\\s*(?<value>\\w{6,})"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "(?:a/c|account|acct)\\s*(?:no\\.?)?\\s*[Xx*]*(?<value>\\d{3,})",
+          "takeLast4": true
+        },
+        {
+          "re": "compte\\s+[Xx*]*(?<value>\\d{3,})",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": [
+        "virement instantané",
+        "debited",
+        "withdrawn",
+        "spent",
+        "charged",
+        "paid",
+        "purchase",
+        "deducted"
+      ],
+      "income": ["credited", "deposited", "received", "refund"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\([^)]*\\)\\s*$",
+        "\\s+Ref\\s+No\\.?\\s*\\w+.*$",
+        "\\s+on\\s+\\d{2}.*$",
+        "\\s+UPI.*$",
+        "\\s+\\d{2}:\\d{2}.*$",
+        "[-\\s]+$",
+        "\\s+PVT\\.?\\s+LTD\\.?$",
+        "\\s+LTD\\.?$"
+      ],
+      "minMerchantLength": 2
+    }
+  },
+  "fixtures": [
+    {
+      "name": "instant transfer",
+      "sender": "38015",
+      "receivedAt": "2025-12-01T00:00:00.000Z",
+      "body": "Caisse d'Epargne: nous vous confirmons la réalisation de votre virement instantané de 1000,00 EUR du 01/12/2025 à 00h00m00s vers NAME FIRST NAME",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1000",
+          "currency": "EUR",
+          "transactionType": "EXPENSE",
+          "merchant": "NAME FIRST NAME",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "instant transfer to PayPal",
+      "sender": "38015",
+      "receivedAt": "2025-12-03T18:46:18.000Z",
+      "body": "Caisse d'Epargne: nous vous confirmons la réalisation de votre virement instantané de 1000,00 EUR du 03/12/2025 à 18h46m18s vers PAYPAL",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1000",
+          "currency": "EUR",
+          "transactionType": "EXPENSE",
+          "merchant": "PAYPAL",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "instant transfer with dot decimals keeps centimes",
+      "sender": "38015",
+      "receivedAt": "2025-12-05T10:15:00.000Z",
+      "body": "Caisse d'Epargne: nous vous confirmons la réalisation de votre virement instantané de 250.75 EUR du 05/12/2025 à 10h15m00s vers JEAN DUPONT",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "250.75",
+          "currency": "EUR",
+          "transactionType": "EXPENSE",
+          "merchant": "JEAN DUPONT"
+        }
+      }
+    },
+    {
+      "name": "ignore addition of beneficiary",
+      "sender": "38015",
+      "receivedAt": "2025-12-02T09:00:00.000Z",
+      "body": "Caisse d'Epargne : Virements - Ajout d'un bénéficiaire le 02/12/2025 sur internet. Si vous n'avez pas initié cette opération, contactez votre agence.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,161 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro BankMuscatParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/BankMuscatParser.kt). Bank Muscat (Oman) sends Arabic-language SMS: - Debit: \"تم خصم OMR 0.650 من حسابك رقم XXXXX بإستخدام بطاقة الخصم المباشر في MERCHANT بتاريخ DATE. رصيدك الحالي هو BALANCE OMR.\" - Credit: \"تم إيداع OMR X.XXX في حسابك رقم XXXXX بتاريخ DATE. رصيدك الحالي هو BALANCE OMR.\" The Kotlin parser overrides isTransactionMessage with only positive Arabic keyword checks (no skip-list), so filter has requireAnyKeyword only."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "om.bankmuscat.bank",
+    "type": "sms-parser",
+    "name": "Bank Muscat",
+    "country": "OM",
+    "currency": "OMR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["BankMuscat", "BKMUSCAT", "BANKMUSCAT", "BK MUSCAT", "bank muscat", "بنك مسقط"],
+      "dltPatterns": ["MUSCAT", "بنك مسقط"]
+    },
+    "filter": {
+      "requireAnyKeyword": ["تم خصم", "تم إيداع", "تم تحويل", "تم سداد"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "OMR\\s+(?<value>[\\d,]+(?:\\.\\d+)?)"
+        },
+        {
+          "re": "(?<value>[\\d,]+(?:\\.\\d+)?)\\s+OMR"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "في\\s+(?<value>.+?)\\s+بتاريخ"
+        }
+      ],
+      "balance": [
+        {
+          "re": "رصيدك الحالي هو\\s+(?<value>[\\d,]+(?:\\.\\d+)?)\\s*OMR"
+        },
+        {
+          "re": "رصيدك الحالي هو\\s+OMR\\s*(?<value>[\\d,]+(?:\\.\\d+)?)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "حسابك رقم\\s+(?<value>[X*\\d]+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "expense": ["تم خصم", "تم سداد"],
+      "income": ["تم إيداع"],
+      "transfer": ["تم تحويل"]
+    },
+    "cardRules": {
+      "includeKeywords": ["بطاقة"],
+      "excludeKeywords": []
+    },
+    "cleaning": {
+      "stripPatterns": ["^\\d{4,}-", "-\\d{4,}$", "-\\d{4,}(?=\\s)"],
+      "minMerchantLength": 2
+    }
+  },
+  "fixtures": [
+    {
+      "name": "debit card purchase - merchant with leading ID",
+      "sender": "BankMuscat",
+      "receivedAt": "2026-03-02T14:43:57.000Z",
+      "body": "تم خصم 0.650 OMR من حسابك رقم XXXXX9999 بإستخدام بطاقة الخصم المباشر في 757487-MASAKEN AL RAHA LLC KHOOM بتاريخ 2026/03/02 14:43:57. رصيدك الحالي هو 9999.740 OMR.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "0.650",
+          "merchant": "MASAKEN AL RAHA LLC KHOOM",
+          "accountLast4": "9999",
+          "balance": "9999.740",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "debit card purchase - merchant with trailing ID",
+      "sender": "BankMuscat",
+      "receivedAt": "2026-04-01T17:54:40.000Z",
+      "body": "تم خصم OMR 0.100 من حسابك رقم XXXXXXX9999 بإستخدام بطاقة الخصم المباشر في Break Point QURU-650068 بتاريخ 2026/04/01 17:54:40. رصيدك الحالي هو 9999.740 OMR.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "0.100",
+          "merchant": "Break Point QURU",
+          "accountLast4": "9999",
+          "balance": "9999.740",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "debit card purchase - merchant with middle ID",
+      "sender": "BankMuscat",
+      "receivedAt": "2026-04-02T16:15:38.000Z",
+      "body": "تم خصم OMR 0.300 من حسابك رقم XXXXXXX9999 بإستخدام بطاقة الخصم المباشر في MASAKEN AL RAHA LLC-833468 KHOOM بتاريخ 2026/04/02 16:15:38. رصيدك الحالي هو 9999.740 OMR.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "0.300",
+          "merchant": "MASAKEN AL RAHA LLC KHOOM",
+          "accountLast4": "9999",
+          "balance": "9999.740",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "deposit credited to account",
+      "sender": "BKMUSCAT",
+      "receivedAt": "2026-05-01T09:12:00.000Z",
+      "body": "تم إيداع OMR 250.500 في حسابك رقم XXXXXXX9999 بتاريخ 2026/05/01 09:12:00. رصيدك الحالي هو 10250.240 OMR.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "250.500",
+          "merchant": "حسابك رقم XXXXXXX9999",
+          "accountLast4": "9999",
+          "balance": "10250.240",
+          "transactionType": "INCOME",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "transfer from account",
+      "sender": "bank muscat",
+      "receivedAt": "2026-05-03T11:00:00.000Z",
+      "body": "تم تحويل OMR 100.000 من حسابك رقم XXXXXXX9999 بتاريخ 2026/05/03 11:00:00. رصيدك الحالي هو 9150.240 OMR.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "100.000",
+          "accountLast4": "9999",
+          "balance": "9150.240",
+          "transactionType": "TRANSFER",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "BankMuscat",
+      "receivedAt": "2026-05-10T08:30:00.000Z",
+      "body": "رمز التحقق الخاص بك هو 123456. لا تشاركه مع أي شخص. بنك مسقط",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

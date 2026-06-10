@@ -1,0 +1,288 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro HSBCBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/HSBCBankParser.kt) plus the BankParser.kt base-class fallbacks it delegates to via super.extractX(...). Fixture bodies come from HSBCBankParserTest.kt. Known deviations from the Kotlin parser (engine limitations): - Kotlin pads \"A/c 074-260***-006\" to \"0006\"; the engine's takeLast4 keeps digits-only without padding, so fixtures assert \"006\"/\"789\". - Kotlin returns \"71xx\" (mixed digits + mask chars) for \"Debit Card XXXXX71xx\"; the engine strips non-digits from accountLast4, so fixtures assert \"71\"."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.hsbc.bank",
+    "type": "sms-parser",
+    "name": "HSBC Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["HSBC", "HSBCIN"],
+      "dltPatterns": ["^[A-Z]{2}-HSBCIN-[A-Z]$", "^[A-Z]{2}-HSBC-[A-Z]$", "HSBC"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp is",
+        "otp valid for",
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "is paid from",
+        "is credited to",
+        "is debited",
+        "used at",
+        "thank you for using",
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "INR\\s+(?<value>[\\d,]+(?:\\.\\d{2})?)\\s+is\\s+(?:paid|credited|debited)"
+        },
+        {
+          "re": "for\\s+INR\\s+(?<value>[\\d,]+(?:\\.\\d{2})?)\\s+on"
+        },
+        {
+          "re": "for\\s+INR\\s+(?<value>[\\d,]+(?:\\.\\d{2})?)(?:\\s|$|\\.)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "as\\s+(?:NEFT|RTGS|IMPS)\\s+from\\s+(?<value>.+?)\\s+\\."
+        },
+        {
+          "re": "at\\s+(?<value>[^.]+?)\\s*\\."
+        },
+        {
+          "re": "used\\s+at\\s+(?<value>[^\\s]+)\\s+for\\s+INR"
+        },
+        {
+          "re": "to\\s+(?<value>[^.]+?)\\s+on\\s+\\d"
+        },
+        {
+          "re": "from\\s+(?<value>[^.]+?)(?:\\s+on\\s+|\\s+with\\s+|$)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Your\\s+)?Avl\\s+Bal\\s+is\\s+INR\\s+(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "available\\s+bal\\s+is\\s+INR\\s+(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "with\\s+UTR\\s+(?<value>\\w+)"
+        },
+        {
+          "re": "with\\s+ref\\s+(?<value>\\w+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "A/c\\s+\\d+-\\d+\\*+-(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Debit\\s+Card\\s+[X*]+(?<value>\\d+[xX]*)",
+          "takeLast4": true
+        },
+        {
+          "re": "credit\\s*card\\s+[xX*]+(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "account\\s+[X*]+(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": ["iccl", "nsccl", "groww", "zerodha", "sip", "mutual fund", "demat"],
+      "credit": ["creditcard", "credit card"],
+      "expense": [
+        "debit card",
+        "is paid from",
+        "is debited",
+        "debited",
+        "withdrawn",
+        "spent",
+        "charged",
+        "paid",
+        "purchase",
+        "deducted"
+      ],
+      "income": [
+        "is credited to",
+        "is credited with",
+        "credited",
+        "deposited",
+        "received",
+        "refund"
+      ]
+    },
+    "cardRules": {
+      "includeKeywords": ["debit card", "credit card", "creditcard", "card ending", "card x"],
+      "excludeKeywords": ["a/c", "account", "saving account", "current account"]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*$",
+        "\\s+UPI.*$",
+        "\\s+at\\s+\\d{2}:\\d{2}.*$",
+        "\\s*-\\s*$",
+        "(\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(\\s+LTD\\.?|\\s+LIMITED)$",
+        "\\s+for\\s+INR\\s+[\\d,]+(?:\\.\\d{2})?$"
+      ],
+      "minMerchantLength": 2,
+      "commonWords": ["USING", "VIA", "THROUGH", "BY", "WITH", "FOR", "TO", "FROM", "AT", "THE"]
+    }
+  },
+  "fixtures": [
+    {
+      "name": "NEFT credit with UTR - format A/c 074-260***-006",
+      "sender": "HSBC",
+      "receivedAt": "2026-06-09T10:00:00.000Z",
+      "body": "HSBC: A/c 074-260***-006 is credited with INR 5000.00 on 27NOV at 06.33.02 with UTR CHASH00007392391 as NEFT from CHAS A/c ***6983 of John Doe . Your Avl Bal is INR 15000.50.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "transactionType": "INCOME",
+          "merchant": "CHAS A/c ***6983 of John Doe",
+          "accountLast4": "006",
+          "balance": "15000.50",
+          "reference": "CHASH00007392391"
+        }
+      }
+    },
+    {
+      "name": "NEFT credit with UTR - different account format",
+      "sender": "HSBC",
+      "receivedAt": "2026-06-09T10:01:00.000Z",
+      "body": "HSBC: A/c 123-456***-789 is credited with INR 2500.75 on 15DEC at 10.15.30 with UTR NEFT12345678901 as NEFT from AXIS A/c ***1234 of Jane Smith . Your Avl Bal is INR 50000.00.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "2500.75",
+          "transactionType": "INCOME",
+          "merchant": "AXIS A/c ***1234 of Jane Smith",
+          "accountLast4": "789",
+          "balance": "50000.00",
+          "reference": "NEFT12345678901"
+        }
+      }
+    },
+    {
+      "name": "debit card purchase",
+      "sender": "HSBC",
+      "receivedAt": "2026-06-09T10:02:00.000Z",
+      "body": "Thank you for using HSBC Debit Card XXXXX71xx at IKEA INDIA . for INR 49.00 on 12-04-25.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "49.00",
+          "transactionType": "EXPENSE",
+          "merchant": "IKEA INDIA",
+          "accountLast4": "71"
+        }
+      }
+    },
+    {
+      "name": "credit card purchase",
+      "sender": "AX-HSBC-S",
+      "receivedAt": "2026-06-09T10:03:00.000Z",
+      "body": "Your HSBC creditcard xxxxx1234 used at AMAZON for INR 305.00 on 15-04-25.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "305.00",
+          "transactionType": "CREDIT",
+          "merchant": "AMAZON",
+          "accountLast4": "1234"
+        }
+      }
+    },
+    {
+      "name": "payment from account with ref",
+      "sender": "JD-HSBCIN-T",
+      "receivedAt": "2026-06-09T10:04:00.000Z",
+      "body": "HSBC: INR 1000.50 is paid from account XXXXXX4567 to ELECTRICITY BOARD on 20APR with ref 222222222222. Your available bal is INR 8000.00.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1000.50",
+          "transactionType": "EXPENSE",
+          "merchant": "ELECTRICITY BOARD",
+          "accountLast4": "4567",
+          "balance": "8000.00",
+          "reference": "222222222222"
+        }
+      }
+    },
+    {
+      "name": "otp message rejected",
+      "sender": "HSBC",
+      "receivedAt": "2026-06-09T10:05:00.000Z",
+      "body": "Your OTP is 482913 for HSBC online banking transaction of INR 5000.00. OTP valid for 10 minutes. Do not share it with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

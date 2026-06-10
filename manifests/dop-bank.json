@@ -1,0 +1,139 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Patterns ported from the original Cashiro DOPBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/DOPBankParser.kt). Department of Post (India Post / DOP savings) alerts follow a single ledger format: \"Account No. XXXXXXXX1234 CREDIT with amount Rs. 5550.00 on <date>. Balance: Rs.40000.00. [S76543210]\". The Kotlin parser never extracts a merchant for these (merchant stays null), so successful parses land at REVIEW with MISSING_MERCHANT rather than inventing one."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.dop.bank",
+    "type": "sms-parser",
+    "name": "Department of Post",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["DOPBNK", "DOP"],
+      "dltPatterns": ["DOPBNK", "DEPARTMENT\\s*OF\\s*POST", "DOP-", "-DOP$", "^DOP$"]
+    },
+    "filter": {
+      "requireAnyKeyword": ["credit", "debit"]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "amount\\s+(?:Rs\\.?|INR)?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Rs\\.?|INR)\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Bal(?:ance)?\\s*:?\\s*(?:Rs\\.?|INR)?\\s*(?<value>[\\d,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "\\[(?<value>[A-Z0-9]+)\\]"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "Acc(?:ount)?\\s*(?:No\\.?)?\\s+(?:[X*]+)?(?<value>\\d{4})",
+          "takeLast4": true
+        },
+        {
+          "re": "a/c\\s*(?:no\\.?)?\\s*[Xx*]*(?<value>\\d{4})",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "income": ["deposited", "received", "refund"],
+      "expense": ["withdrawn", "spent", "charged", "deducted"]
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["credit"]
+        },
+        "field": "transactionType",
+        "value": "INCOME"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["debit"],
+          "notContainsAny": ["credit"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "credit alert with balance and reference",
+      "sender": "VM-DOPBNK-G",
+      "receivedAt": "2026-03-02T10:00:00.000Z",
+      "body": "Account  No. XXXXXXXX1234 CREDIT with amount Rs. 5550.00 on 02-03-2026. Balance: Rs.40000.00. [S76543210]",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "5550.00",
+          "transactionType": "INCOME",
+          "accountLast4": "1234",
+          "balance": "40000.00",
+          "reference": "S76543210"
+        }
+      }
+    },
+    {
+      "name": "credit alert from alternate DLT sender",
+      "sender": "BV-DOPBNK-S",
+      "receivedAt": "2026-01-02T10:00:00.000Z",
+      "body": "Account  No. XXXXXXXX1234 CREDIT with amount Rs. 5550.00 on 02-01-2026. Balance: Rs.32000.00. [S92247102]",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "5550.00",
+          "transactionType": "INCOME",
+          "accountLast4": "1234",
+          "balance": "32000.00",
+          "reference": "S92247102"
+        }
+      }
+    },
+    {
+      "name": "debit alert classified as expense",
+      "sender": "VM-DOPBNK-G",
+      "receivedAt": "2026-03-05T10:00:00.000Z",
+      "body": "Account  No. XXXXXXXX1234 DEBIT with amount Rs. 1,200.00 on 05-03-2026. Balance: Rs.38800.00. [S11223344]",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MISSING_MERCHANT"],
+        "fields": {
+          "amount": "1200.00",
+          "transactionType": "EXPENSE",
+          "accountLast4": "1234",
+          "balance": "38800.00",
+          "reference": "S11223344"
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "VM-DOPBNK-G",
+      "receivedAt": "2026-03-02T09:00:00.000Z",
+      "body": "Your OTP for India Post Payments login is 482913. Valid for 10 minutes. Do not share it with anyone.",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}

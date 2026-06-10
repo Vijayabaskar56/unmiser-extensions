@@ -1,0 +1,408 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro IndusIndBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/IndusIndBankParser.kt) plus the BankParser.kt base-class fallbacks it relies on (CompiledPatterns Amount/Merchant/Balance/Reference/Account). Fixture bodies are taken verbatim from IndusIndBankParserTest.kt. Kotlin type order is: spent/debited/purchase -> EXPENSE first, then deposit/fd/ach -> INVESTMENT, then the base classifier. Because the engine's typeRules put investment above expense, that ordering is reproduced with pipeline setFieldWhen steps (which run before typeRules classification)."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.indusind.bank",
+    "type": "sms-parser",
+    "name": "IndusInd Bank",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "senders": ["INDUSB", "INDUSIND"],
+      "dltPatterns": [
+        "^[A-Z]{2}-INDUSB(?:-[A-Z])?$",
+        "^[A-Z]{2}-INDUSIND(?:-[A-Z])?$",
+        "^[A-Z]{2}-INDUS(?:[A-Z]{2,})?-[A-Z]$",
+        "INDUSIND\\s+BANK"
+      ]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid",
+        "net interest"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "(?:INR|Rs\\.?|₹)\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+(?:debited|credited|spent|withdrawn|paid|purchase)"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "towards\\s+(?<value>[^\\s/@]*[^\\s/@.,;])"
+        },
+        {
+          "re": "from\\s+account\\s+[^\\s/]+/(?<value>[^\\s(.,;]+)"
+        },
+        {
+          "re": "from\\s+(?<value>[^\\s/@]+)@"
+        },
+        {
+          "re": "at\\s+(?<value>[^\\n]+?)(?:\\s+Ref|\\s+on|$)"
+        },
+        {
+          "re": "/(?!\\s)(?<value>[^/.\\s]+)\\.\\s*Bal"
+        },
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "Avl\\s*BAL\\s+of\\s+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Avl\\s*BAL|Available\\s+Balance(?:\\s+is)?|Bal)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "RRN[:\\s]+(?<value>[0-9]+)"
+        },
+        {
+          "re": "(?:IMPS\\s+)?Ref\\s+no\\.?\\s*(?<value>[0-9]+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        },
+        {
+          "re": "Reference\\s+Number[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "A/?C\\s+(\\d{2,})[*xX#]+(\\d{4,})",
+          "group": 2,
+          "takeLast4": true
+        },
+        {
+          "re": "A/?c\\s+\\*?[Xx]+\\s*(?<value>\\d{4,6})",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+\\d*[Xx*]+(?<value>\\d{4,})",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?<value>\\d{4,})",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "nsccl",
+        "clearing corporation",
+        "nach",
+        "ecs",
+        "groww",
+        "zerodha",
+        "upstox",
+        "kuvera",
+        "smallcase",
+        "mutual fund",
+        "sip",
+        "elss",
+        "ipo",
+        "folio",
+        "demat",
+        "cdsl",
+        "nsdl"
+      ],
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["credited", "deposited", "received", "refund", "cashback"]
+    },
+    "cardRules": {
+      "excludeKeywords": [
+        "a/c",
+        "account",
+        "ac ",
+        "acc ",
+        "saving account",
+        "current account",
+        "ach db",
+        "ach cr",
+        "nach"
+      ],
+      "includeKeywords": [
+        "card ending",
+        "card xx",
+        "debit card",
+        "credit card",
+        "card no.",
+        "card number",
+        "card *",
+        "card x"
+      ]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*$",
+        "\\s+PVT\\.?\\s*LTD\\.?$",
+        "\\s+PRIVATE\\s+LIMITED$",
+        "\\s+LTD\\.?$",
+        "\\s*-\\s*$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["spent", "debited", "purchase"]
+        },
+        "field": "transactionType",
+        "value": "EXPENSE"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["deposit", "fd", "ach"],
+          "notContainsAny": ["spent", "debited", "purchase"]
+        },
+        "field": "transactionType",
+        "value": "INVESTMENT"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "debit with merchant and balance",
+      "sender": "VM-INDUSB-S",
+      "receivedAt": "2026-06-01T10:00:00.000Z",
+      "body": "Rs. 1,234.00 debited from A/c XX1234 at ZOMATO Ref 998877. Avl Bal: Rs 10,000.00",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1234.00",
+          "transactionType": "EXPENSE",
+          "merchant": "ZOMATO",
+          "accountLast4": "1234",
+          "balance": "10000.00",
+          "reference": "998877"
+        }
+      }
+    },
+    {
+      "name": "upi debit with RRN and VPA",
+      "sender": "AD-INDUSIND-S",
+      "receivedAt": "2026-06-01T10:05:00.000Z",
+      "body": "A/c *XX1234 debited by Rs 1234.00 towards xxxx.yyyy@icici. RRN: 510048508040. Not You? call 18602677777- IndusInd Bank.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1234.00",
+          "transactionType": "EXPENSE",
+          "merchant": "xxxx.yyyy",
+          "accountLast4": "1234",
+          "reference": "510048508040"
+        }
+      }
+    },
+    {
+      "name": "upi credit with RRN and VPA",
+      "sender": "AD-INDUSIND-S",
+      "receivedAt": "2026-06-01T10:10:00.000Z",
+      "body": "A/C *XX1234 credited by Rs 25000.00 from xxxx.yyyy@ybl. RRN:510048508040. Avl Bal:105502.12. Not you? Call 18602677777 - IndusInd bank.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "25000.00",
+          "transactionType": "INCOME",
+          "merchant": "xxxx.yyyy",
+          "accountLast4": "1234",
+          "reference": "510048508040",
+          "balance": "105502.12"
+        }
+      }
+    },
+    {
+      "name": "deposit interest payout is filter-rejected",
+      "sender": "AD-INDUSIND-S",
+      "receivedAt": "2026-06-01T10:15:00.000Z",
+      "body": "Net interest INR 248.07 paid on your IndusInd Deposit No 300***123456 on 17/09/25. Call 18602677777 for assistance - IndusInd Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "imps debit",
+      "sender": "AD-INDUSIND-S",
+      "receivedAt": "2026-06-01T10:20:00.000Z",
+      "body": "Your IndusInd Account 20XXXXX1234 has been debited for INR 6440 towards IMPS/12345678901. Call 18602677777 to report issue-IndusInd Bank.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "6440",
+          "transactionType": "EXPENSE",
+          "merchant": "IMPS",
+          "accountLast4": "1234"
+        }
+      }
+    },
+    {
+      "name": "balance-only notification is filter-rejected",
+      "sender": "AD-INDUSIND-S",
+      "receivedAt": "2026-06-01T10:25:00.000Z",
+      "body": "Your A/C 2134***12345 has Avl BAL of INR 1,234.56 as on 05/10/25 04:10 AM. Download IndusMobile from PlayStore - IndusInd Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    },
+    {
+      "name": "ach debit with Ref and trailing Bal",
+      "sender": "AD-INDUSIND-S",
+      "receivedAt": "2026-06-01T10:30:00.000Z",
+      "body": "IndusInd A/C  Debited; INR 4,500.00 Ref-ACH DR INW PAY/0000WD2CEFDT2Z58B2202320321456/Grow.Bal INR 141,999.93.Dispute-Call 18602677777-IndusInd Bank.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "4500.00",
+          "transactionType": "EXPENSE",
+          "merchant": "Grow",
+          "balance": "141999.93",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "debit card purchase masked account keeps last4",
+      "sender": "AD-INDUSIND-S",
+      "receivedAt": "2026-06-01T10:35:00.000Z",
+      "body": "INR 1,101.53 debited from your A/C 201***123456 towards Debit Card Purchase. Avl BAL INR 400.20 - Not you? Call 18602677777 to report issue - IndusInd Bank.",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1101.53",
+          "transactionType": "EXPENSE",
+          "merchant": "Debit",
+          "accountLast4": "3456",
+          "balance": "400.20",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "upi credit from JK route sender",
+      "sender": "JK-INDUSB-S",
+      "receivedAt": "2026-06-01T10:40:00.000Z",
+      "body": "A/C *XX0000 credited by Rs 300.00 from abcd@upiid. RRN:123456789098. Avl Bal:00.00. Not you? Call 18602677777 - IndusInd bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "300.00",
+          "transactionType": "INCOME",
+          "merchant": "abcd",
+          "accountLast4": "0000",
+          "reference": "123456789098",
+          "balance": "00.00"
+        }
+      }
+    },
+    {
+      "name": "imps credit",
+      "sender": "JM-INDUSB-S",
+      "receivedAt": "2026-06-01T10:45:00.000Z",
+      "body": "Your IndusInd Account 15XXXXX0000 has been credited for INR 116.56 towards IMPS/500200000290. Call 18602677777 to report issue-IndusInd Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "116.56",
+          "transactionType": "INCOME",
+          "merchant": "IMPS",
+          "accountLast4": "0000"
+        }
+      }
+    },
+    {
+      "name": "imps credit with from account/merchant pattern",
+      "sender": "VM-INDUSB-T",
+      "receivedAt": "2026-06-01T10:50:00.000Z",
+      "body": "Your account XXXXXXX1234 is credited by Rs.54321 on 07-11-25 received from account XXXXXXX4321/MADMONEY (IMPS Ref no. 123456789). Call 18602677777 to report issue-IndusInd Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "54321",
+          "transactionType": "INCOME",
+          "merchant": "MADMONEY",
+          "accountLast4": "1234",
+          "reference": "123456789"
+        }
+      }
+    }
+  ]
+}

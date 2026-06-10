@@ -1,0 +1,295 @@
+{
+  "$schema": "../manifest.schema.json",
+  "notes": [
+    "Ported from the original Cashiro JupiterBankParser.kt (parser-core/src/main/kotlin/com/ritesh/parser/core/bank/JupiterBankParser.kt). Jupiter is a digital banking app powered by CSB Bank (Edge CSB Bank RuPay credit card, UPI, and account debits/credits). The Kotlin parser's canHandle accepts only DLT-shaped senders (XX-JTEDGE-S / XX-JTEDGE-T / legacy XX-JTEDGE), so dispatch carries dltPatterns only. Merchant is a keyword switch (\"credit card\" -> \"Credit Card Payment\", \"upi\" -> \"UPI Transaction\", else base patterns then \"Jupiter Transaction\"), modeled as pipeline setFieldWhen steps after the base merchant extractors."
+  ],
+  "manifest": {
+    "schemaVersion": "1.0",
+    "pluginId": "in.jupiter.bank",
+    "type": "sms-parser",
+    "name": "Jupiter",
+    "country": "IN",
+    "currency": "INR",
+    "version": "1",
+    "trust": "bundled",
+    "dispatch": {
+      "dltPatterns": ["^[A-Z]{2}-JTEDGE-S$", "^[A-Z]{2}-JTEDGE-T$", "^[A-Z]{2}-JTEDGE$"]
+    },
+    "filter": {
+      "excludeKeywords": [
+        "otp",
+        "one time password",
+        "verification code",
+        "offer",
+        "discount",
+        "cashback offer",
+        "win ",
+        "has requested",
+        "payment request",
+        "collect request",
+        "requesting payment",
+        "requests rs",
+        "ignore if already paid",
+        "have received payment",
+        "is due",
+        "min amount due",
+        "minimum amount due",
+        "in arrears",
+        "is overdue",
+        "ignore if paid"
+      ],
+      "requireAnyKeyword": [
+        "debited",
+        "credited",
+        "withdrawn",
+        "deposited",
+        "spent",
+        "received",
+        "transferred",
+        "paid"
+      ]
+    },
+    "extract": {
+      "amount": [
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+debited"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)\\s+credited"
+        },
+        {
+          "re": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "merchant": [
+        {
+          "re": "to\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "from\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref|\\s+UPI)"
+        },
+        {
+          "re": "at\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+Ref)"
+        },
+        {
+          "re": "for\\s+(?<value>[^.\\n]+?)(?:\\s+on|\\s+at|\\s+Ref)"
+        }
+      ],
+      "balance": [
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+₹\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Bal|Balance|Avl Bal|Available Balance)[:\\s]+(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        },
+        {
+          "re": "(?:Updated Balance|Remaining Balance)[:\\s]+INR\\s*(?<value>[0-9,]+(?:\\.\\d{2})?)"
+        }
+      ],
+      "reference": [
+        {
+          "re": "UPI\\s+Ref\\s+no\\.?\\s*(?<value>[A-Za-z0-9]+)"
+        },
+        {
+          "re": "(?:Ref|Reference|Txn|Transaction)(?:\\s+No)?[:\\s]+(?<value>[A-Z0-9]+)"
+        },
+        {
+          "re": "UPI[:\\s]+(?<value>[0-9]+)"
+        },
+        {
+          "re": "Reference\\s+Number[:\\s]+(?<value>[A-Z0-9]+)"
+        }
+      ],
+      "accountLast4": [
+        {
+          "re": "ending\\s+(?<value>\\d{4})"
+        },
+        {
+          "re": "(?:A/c|Account|Acct)(?:\\s+No)?\\.?\\s+(?:[Xx\\*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "Card\\s+(?:[Xx\\*]*\\**)?(?<value>\\d+)",
+          "takeLast4": true
+        },
+        {
+          "re": "(?:A/c|Account).*?(?<value>\\d+)(?:\\s|$)",
+          "takeLast4": true
+        }
+      ]
+    },
+    "typeRules": {
+      "investment": [
+        "iccl",
+        "indian clearing corporation",
+        "nsccl",
+        "nse clearing",
+        "clearing corporation",
+        "nach",
+        "groww",
+        "zerodha",
+        "upstox",
+        "kuvera",
+        "paytm money",
+        "etmoney",
+        "smallcase",
+        "angel one",
+        "5paisa",
+        "mutual fund",
+        "sip",
+        "elss",
+        "ipo",
+        "folio",
+        "demat",
+        "digital gold",
+        "sovereign gold",
+        "cdsl",
+        "nsdl"
+      ],
+      "expense": ["debited", "withdrawn", "spent", "charged", "paid", "purchase", "deducted"],
+      "income": ["credited", "deposited", "received", "refund", "cashback"]
+    },
+    "cardRules": {
+      "excludeKeywords": ["a/c", "account", "ac ", "acc ", "saving account", "current account"],
+      "includeKeywords": [
+        "card ending",
+        "card xx",
+        "debit card",
+        "credit card",
+        "card no.",
+        "card number",
+        "card *",
+        "card x"
+      ]
+    },
+    "cleaning": {
+      "stripPatterns": [
+        "\\s*\\(.*?\\)\\s*$",
+        "\\s+Ref\\s+No.*",
+        "\\s+on\\s+\\d{2}.*",
+        "\\s+UPI.*",
+        "\\s+at\\s+\\d{2}:\\d{2}.*",
+        "\\s*-\\s*$",
+        "(\\s+PVT\\.?\\s*LTD\\.?|\\s+PRIVATE\\s+LIMITED)$",
+        "(\\s+LTD\\.?|\\s+LIMITED)$"
+      ],
+      "minMerchantLength": 2
+    },
+    "pipeline": [
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["upi"]
+        },
+        "field": "merchant",
+        "value": "UPI Transaction"
+      },
+      {
+        "kind": "setFieldWhen",
+        "when": {
+          "containsAny": ["edge csb bank rupay credit card", "jupiter csb edge", "credit card"]
+        },
+        "field": "merchant",
+        "value": "Credit Card Payment"
+      },
+      {
+        "kind": "fallbackField",
+        "field": "merchant",
+        "value": "Jupiter Transaction"
+      }
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "edge csb rupay credit card debit",
+      "sender": "VM-JTEDGE-S",
+      "receivedAt": "2026-04-14T10:21:00.000Z",
+      "body": "Rs.130.00 debited to your Edge CSB Bank RuPay Credit Card ending 6852. To dispute call 18002586985 -Jupiter, powered by CSB Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "130.00",
+          "merchant": "Credit Card Payment",
+          "accountLast4": "6852",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "upi debit from account with reference",
+      "sender": "AX-JTEDGE-T",
+      "receivedAt": "2026-04-20T08:05:00.000Z",
+      "body": "Rs.250.00 debited from your Jupiter A/c XX1234 via UPI to merchant@ybl. UPI Ref no.281751568470. Not you? Visit jupiter.money/help -Jupiter, powered by CSB Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "250.00",
+          "merchant": "UPI Transaction",
+          "accountLast4": "1234",
+          "reference": "281751568470",
+          "transactionType": "EXPENSE",
+          "isFromCard": false
+        }
+      }
+    },
+    {
+      "name": "upi credit to account with balance",
+      "sender": "JD-JTEDGE-S",
+      "receivedAt": "2026-05-02T16:42:00.000Z",
+      "body": "Rs.5000.00 credited to your Jupiter A/c XX1234 via UPI. UPI Ref no.512345678901. Avl Bal: Rs.15230.50 -Jupiter, powered by CSB Bank",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "5000.00",
+          "merchant": "UPI Transaction",
+          "accountLast4": "1234",
+          "reference": "512345678901",
+          "balance": "15230.50",
+          "transactionType": "INCOME"
+        }
+      }
+    },
+    {
+      "name": "credit card spend keeps Credit Card Payment merchant",
+      "sender": "BP-JTEDGE",
+      "receivedAt": "2026-05-12T13:30:00.000Z",
+      "body": "Spent Rs.1,299.00 on Edge CSB Bank RuPay Credit Card ending 6852 at AMAZON PAY INDIA on 12-05-2026. Not you? Call 18002586985 -Jupiter",
+      "expected": {
+        "confidence": "HIGH",
+        "fields": {
+          "amount": "1299.00",
+          "merchant": "Credit Card Payment",
+          "accountLast4": "6852",
+          "transactionType": "EXPENSE",
+          "isFromCard": true
+        }
+      }
+    },
+    {
+      "name": "otp message is filter-rejected",
+      "sender": "VM-JTEDGE-S",
+      "receivedAt": "2026-05-15T09:00:00.000Z",
+      "body": "Your OTP for Jupiter Edge CSB Bank RuPay Credit Card transaction of Rs.500.00 paid at AMAZON is 123456. Do not share it with anyone -Jupiter, powered by CSB Bank",
+      "expected": {
+        "confidence": "REJECTED",
+        "reasons": ["FILTER_REJECTED"]
+      }
+    }
+  ]
+}
