@@ -1,0 +1,43 @@
+name: Validate & publish catalog
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Validate all manifests (schema + fixtures + unique pluginIds)
+        run: bun run validate
+
+      - name: Regenerate index.json
+        run: bun scripts/generate-catalog.ts
+
+      # PRs: just verify the catalog is not stale (no commit-back from forks).
+      - name: Check catalog freshness (PRs)
+        if: github.event_name == 'pull_request'
+        run: bun scripts/generate-catalog.ts --check
+
+      # main: commit the regenerated catalog back if the entries changed.
+      # generate-catalog.ts skips the rewrite when only generatedAt would
+      # change, so this never commit-loops.
+      - name: Commit index.json if changed
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "ci: regenerate catalog index.json"
+          file_pattern: index.json

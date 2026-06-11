@@ -1,0 +1,997 @@
+{
+  "schemaVersion": "1",
+  "generatedAt": "2026-06-11T18:16:05.680Z",
+  "signature": null,
+  "entries": [
+    {
+      "pluginId": "ae.adcb.bank",
+      "name": "Abu Dhabi Commercial Bank",
+      "country": "AE",
+      "currency": "AED",
+      "version": "1",
+      "file": "manifests/adcb.json",
+      "sha256": "53f9f5b8effe65fe4546c773e8a8782b8992b4710c3ce0f5c8176c1dfb3c4d37",
+      "bytes": 14072
+    },
+    {
+      "pluginId": "ae.emiratesnbd.bank",
+      "name": "Emirates NBD",
+      "country": "AE",
+      "currency": "AED",
+      "version": "1",
+      "file": "manifests/emirates-nbd.json",
+      "sha256": "da0d7e8ef3a4153a00477cc533a08f0c8f7b519f0fef078ee0f1a1907c4c2c23",
+      "bytes": 9295
+    },
+    {
+      "pluginId": "ae.fab.bank",
+      "name": "First Abu Dhabi Bank",
+      "country": "AE",
+      "currency": "AED",
+      "version": "1",
+      "file": "manifests/fab.json",
+      "sha256": "6401813b88c675e9621ed208c680534dc2c07fde2a39e5e02dfe0a13777384f9",
+      "bytes": 15868
+    },
+    {
+      "pluginId": "ae.liv.bank",
+      "name": "Liv Bank",
+      "country": "AE",
+      "currency": "AED",
+      "version": "1",
+      "file": "manifests/liv-bank.json",
+      "sha256": "4232199eb9fc07762a0b3260f31e45bed19dc48c5a8e4e3d10d853abc72f56d2",
+      "bytes": 8216
+    },
+    {
+      "pluginId": "ae.mashreq.bank",
+      "name": "Mashreq Bank",
+      "country": "AE",
+      "currency": "AED",
+      "version": "1",
+      "file": "manifests/mashreq-bank.json",
+      "sha256": "6aff21f2f2c050b162f9582427d5627c62d05da2211052e10130f84701a09920",
+      "bytes": 11267
+    },
+    {
+      "pluginId": "ae.uae.bank",
+      "name": "UAE Bank",
+      "country": "AE",
+      "currency": "AED",
+      "version": "1",
+      "file": "manifests/uae-bank.json",
+      "sha256": "0227207eede0c790f661bc36e5dd9c9746015f4dcf2e9ae5d65a4040b84c4ebf",
+      "bytes": 13936
+    },
+    {
+      "pluginId": "by.priorbank.bank",
+      "name": "Priorbank",
+      "country": "BY",
+      "currency": "BYN",
+      "version": "1",
+      "file": "manifests/priorbank.json",
+      "sha256": "e254a9da368602ce437f0f95c6971852951f5c1f6a5fe1245106f4d1ab630fcf",
+      "bytes": 3584
+    },
+    {
+      "pluginId": "co.bancolombia.bank",
+      "name": "Bancolombia",
+      "country": "CO",
+      "currency": "COP",
+      "version": "1",
+      "file": "manifests/bancolombia.json",
+      "sha256": "79a9a18c88f4c0ac89479fc9271873623ed30ee93262a3122330cb638d57098e",
+      "bytes": 7012
+    },
+    {
+      "pluginId": "cz.mbank.bank",
+      "name": "mBank CZ",
+      "country": "CZ",
+      "currency": "CZK",
+      "version": "1",
+      "file": "manifests/m-bank-cz.json",
+      "sha256": "4fb8e802ec6f7c036096d4bb75c790074b642ca03afd7e92fae3b7a3ae3000f1",
+      "bytes": 4158
+    },
+    {
+      "pluginId": "eg.cib.bank",
+      "name": "CIB Egypt",
+      "country": "EG",
+      "currency": "EGP",
+      "version": "1",
+      "file": "manifests/cib-egypt.json",
+      "sha256": "f096bfaf6ab5230a9044e1ea67214f128b6b95573e7db098d887919c129c1558",
+      "bytes": 6728
+    },
+    {
+      "pluginId": "et.cbe.bank",
+      "name": "Commercial Bank of Ethiopia",
+      "country": "ET",
+      "currency": "ETB",
+      "version": "1",
+      "file": "manifests/cbe-bank.json",
+      "sha256": "db25b00a49ca8704186d06595fd08f1e173f83a2edfb18c1a11524254d02cee6",
+      "bytes": 8706
+    },
+    {
+      "pluginId": "et.dashen.bank",
+      "name": "Dashen Bank",
+      "country": "ET",
+      "currency": "ETB",
+      "version": "1",
+      "file": "manifests/dashen-bank.json",
+      "sha256": "c3c8907563a5f458f7387a5e70ae2a0fa231f09db510905af0ec57d53e43e1f0",
+      "bytes": 6294
+    },
+    {
+      "pluginId": "et.telebirr.wallet",
+      "name": "Telebirr",
+      "country": "ET",
+      "currency": "ETB",
+      "version": "1",
+      "file": "manifests/telebirr.json",
+      "sha256": "95439aa25ece898a21c1510b68bdfbeba288ce0f651bd511e0b78d53f79c74a2",
+      "bytes": 14114
+    },
+    {
+      "pluginId": "et.zemen.bank",
+      "name": "Zemen Bank",
+      "country": "ET",
+      "currency": "ETB",
+      "version": "1",
+      "file": "manifests/zemen-bank.json",
+      "sha256": "d3dde56565ab6983156adf1b9e428a676694bfe1c49ec0690659f469bf5b137d",
+      "bytes": 9292
+    },
+    {
+      "pluginId": "fr.bpce.bank",
+      "name": "BPCE",
+      "country": "FR",
+      "currency": "EUR",
+      "version": "1",
+      "file": "manifests/bpce.json",
+      "sha256": "8fce8e14f6bdbcff62bbdeff6ed09fb9ea46a3564b7076db5ad00a0ce77a0110",
+      "bytes": 5560
+    },
+    {
+      "pluginId": "in.airtel.bank",
+      "name": "Airtel Payments Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/airtel-payments-bank.json",
+      "sha256": "eb09c1329b0c7bed1dc978f8ce743f295c101d807de4b4f7c2f354ae92bfa70e",
+      "bytes": 6760
+    },
+    {
+      "pluginId": "in.amazonpay.wallet",
+      "name": "Amazon Pay",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/juspay.json",
+      "sha256": "f16d0ab52141ea41ba1bc308d37715d3e1d13bf6fa48b9193f867a273036f748",
+      "bytes": 11563
+    },
+    {
+      "pluginId": "in.amex.card",
+      "name": "American Express",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/amex-bank.json",
+      "sha256": "abd501d9e0ab8ca1dd509f29a93b6c0717d1de7757b4bdc67bfcd473ab5a8c71",
+      "bytes": 7382
+    },
+    {
+      "pluginId": "in.au.bank",
+      "name": "AU Small Finance Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/au-bank.json",
+      "sha256": "008e660bd743f2666acfca1f2fec5eb91db5f7dacbb9788186aaa2ee077d3dcc",
+      "bytes": 8830
+    },
+    {
+      "pluginId": "in.axis.bank",
+      "name": "Axis Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/axis-bank.json",
+      "sha256": "9b2cff06a2db3806d90bbbaeea07c35ae044c0494165e272e4a4f12c6628e1ad",
+      "bytes": 14208
+    },
+    {
+      "pluginId": "in.bandhan.bank",
+      "name": "Bandhan Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/bandhan-bank.json",
+      "sha256": "8ae01e146cba57e54ba85f2a6e3eb6848c8625ce636d4b104e114d06138cf4b9",
+      "bytes": 10157
+    },
+    {
+      "pluginId": "in.bob.bank",
+      "name": "Bank of Baroda",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/bank-of-baroda.json",
+      "sha256": "d660151246d120ab5ee6df9790876efe91e9cb7265bd9136c2c733c25a29d401",
+      "bytes": 13556
+    },
+    {
+      "pluginId": "in.boi.bank",
+      "name": "Bank of India",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/bank-of-india.json",
+      "sha256": "70c617742992885dd25ceb6acb7ba31a8a06fb285fa015492925da87601c578b",
+      "bytes": 12015
+    },
+    {
+      "pluginId": "in.canara.bank",
+      "name": "Canara Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/canara-bank.json",
+      "sha256": "d34dd22c2fd942940e6a7e343f4d2577f094e9f8159b06ec30bc7cb3fd4dced9",
+      "bytes": 7246
+    },
+    {
+      "pluginId": "in.cboi.bank",
+      "name": "Central Bank of India",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/central-bank-of-india.json",
+      "sha256": "90ffc40ab5db1b0d30699c45e6d9073275f76ec8f07c8d4c31204bf8e8333943",
+      "bytes": 9124
+    },
+    {
+      "pluginId": "in.cityunion.bank",
+      "name": "City Union Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/city-union-bank.json",
+      "sha256": "08766b08df46db052ef57907cad7a3a736a355f32347332eada7c076faefb3e8",
+      "bytes": 7144
+    },
+    {
+      "pluginId": "in.cred.wallet",
+      "name": "CRED",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/cred.json",
+      "sha256": "b21550ed18cd5f62e941d864a41b8849f65dc4b8c0ae1720990cb4ba6db9b030",
+      "bytes": 4888
+    },
+    {
+      "pluginId": "in.dbs.bank",
+      "name": "DBS Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/dbs-bank.json",
+      "sha256": "02003ce1d924933cbcf2b02792a4abee3dba46c9979bcd826354b4522b88ad91",
+      "bytes": 8718
+    },
+    {
+      "pluginId": "in.dhanlaxmi.bank",
+      "name": "Dhanlaxmi Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/dhanlaxmi-bank.json",
+      "sha256": "80afb48f1d2effd1a831913bcab4c43623990689e82c9040b4fee91fc1d8b7b0",
+      "bytes": 8849
+    },
+    {
+      "pluginId": "in.dop.bank",
+      "name": "Department of Post",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/dop-bank.json",
+      "sha256": "e18ad7703d0311ddb43384f28a1467418a9019eee57a42a0335e300d10b869ba",
+      "bytes": 4398
+    },
+    {
+      "pluginId": "in.equitas.bank",
+      "name": "Equitas Small Finance Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/equitas-bank.json",
+      "sha256": "d5376150ec9673b0cb81ef487e94da039bb0ccc0b31e3d68c6713201868df6be",
+      "bytes": 8451
+    },
+    {
+      "pluginId": "in.federal.bank",
+      "name": "Federal Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/federal-bank.json",
+      "sha256": "b0244baa81c37e524d54718cb54d593e7ac640721712324981b9c268680f4e16",
+      "bytes": 18770
+    },
+    {
+      "pluginId": "in.hdfc.bank",
+      "name": "HDFC Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/hdfc-bank.json",
+      "sha256": "a34e6577d8053f8c4a903339be4078a7732a8377e7e6f3607696fcf0ad2e512e",
+      "bytes": 6440
+    },
+    {
+      "pluginId": "in.hdfcmf.bank",
+      "name": "HDFC Mutual Fund",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/hdfc-mutual-fund.json",
+      "sha256": "cbc768713fd6c3a1f7ebcf2025182cdd3268226ef4e5efbc8eba00c1ba668dd2",
+      "bytes": 4320
+    },
+    {
+      "pluginId": "in.hsbc.bank",
+      "name": "HSBC Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/hsbc-bank.json",
+      "sha256": "6b1a4485b1c57e29c19f8745296a7e17c54816a329a41e2ac27f5c59eb7101b7",
+      "bytes": 9024
+    },
+    {
+      "pluginId": "in.icici.bank",
+      "name": "ICICI Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/icici-bank.json",
+      "sha256": "5371975909ec4ce342bf0d10cab049580b99ba4b82a11924fd6ace76cfd5edff",
+      "bytes": 16561
+    },
+    {
+      "pluginId": "in.idbi.bank",
+      "name": "IDBI Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/idbi-bank.json",
+      "sha256": "c8f93985f037cf54ba5d8aa7045f58ff31fdd1958f947e7ea691e03d6e5d7e0b",
+      "bytes": 9339
+    },
+    {
+      "pluginId": "in.idfcfirst.bank",
+      "name": "IDFC First Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/idfc-first-bank.json",
+      "sha256": "4100d440135758a1b93427d5c0af5da829c7c0ae04fa1c1f5c5babf997897188",
+      "bytes": 10372
+    },
+    {
+      "pluginId": "in.indianbank.bank",
+      "name": "Indian Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/indian-bank.json",
+      "sha256": "918a1dc7ac83d71fac28fa97d3bb505bfd5d51b73a58e3bf89280f6c3b9e89b5",
+      "bytes": 12721
+    },
+    {
+      "pluginId": "in.indusind.bank",
+      "name": "IndusInd Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/indus-ind-bank.json",
+      "sha256": "d58e74d6f133430d89768762764d8971865035f3ed1e105f7a0529b61b58dbf4",
+      "bytes": 12551
+    },
+    {
+      "pluginId": "in.iob.bank",
+      "name": "Indian Overseas Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/iob-bank.json",
+      "sha256": "64a34cd173867de3b150e8a23805e7466132358bf01203a1e7fa1b85291f7148",
+      "bytes": 8279
+    },
+    {
+      "pluginId": "in.ippb.bank",
+      "name": "India Post Payments Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/ippb.json",
+      "sha256": "0ba06544b71f51522523a7300694a68bf90c823f23ef65bc1e406af4ec8270ab",
+      "bytes": 6571
+    },
+    {
+      "pluginId": "in.jio.jiopay",
+      "name": "JioPay",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/jiopay.json",
+      "sha256": "00484f01b7bdf9aa4c9a63da9b718fea7d3084aae651e6df0d4df190d03248af",
+      "bytes": 6240
+    },
+    {
+      "pluginId": "in.jiopayments.bank",
+      "name": "Jio Payments Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/jio-payments-bank.json",
+      "sha256": "109446cef77de29a6280b1d74c1ce09afc9fb346661550c331135a3b9faec288",
+      "bytes": 9103
+    },
+    {
+      "pluginId": "in.jkbank.bank",
+      "name": "JK Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/jk-bank.json",
+      "sha256": "da2d2fb5006fef989078a2981e5f7eb9a2166645d094a659922e59e1e3e1bce8",
+      "bytes": 13132
+    },
+    {
+      "pluginId": "in.jupiter.bank",
+      "name": "Jupiter",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/jupiter-bank.json",
+      "sha256": "376ec75128ffdeea0e8a76922fb2f0e107c58bb5c8cd08cfa9b89eaa3072d6c4",
+      "bytes": 9018
+    },
+    {
+      "pluginId": "in.karnataka.bank",
+      "name": "Karnataka Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/karnataka-bank.json",
+      "sha256": "be03f30c2df28f956a20334516e3b8c80bca900b344d42bc1792b6be8234008f",
+      "bytes": 9905
+    },
+    {
+      "pluginId": "in.keralagramin.bank",
+      "name": "Kerala Gramin Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/kerala-gramin-bank.json",
+      "sha256": "6664e000cc525cf9173a1ac531f50e85fe4fb665c2fd2186cc3d7e91698d534a",
+      "bytes": 5007
+    },
+    {
+      "pluginId": "in.kotak.bank",
+      "name": "Kotak Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/kotak-bank.json",
+      "sha256": "3e54d90d32fea2dada38dfa27cfc0d88f57d64f73cd20a42df2d898567d4cac8",
+      "bytes": 9666
+    },
+    {
+      "pluginId": "in.lazypay.wallet",
+      "name": "LazyPay",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/lazy-pay.json",
+      "sha256": "40171f0073e906fa222261b21f2eb2995edee455c79ec7309eca08886e0b48e8",
+      "bytes": 7235
+    },
+    {
+      "pluginId": "in.onecard.card",
+      "name": "OneCard",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/one-card.json",
+      "sha256": "8936566ee9ac7ac53a912e47bffe0241acfca6fc4f2e684d90bd549389c8af2b",
+      "bytes": 7162
+    },
+    {
+      "pluginId": "in.pnb.bank",
+      "name": "Punjab National Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/pnb-bank.json",
+      "sha256": "2cfb15af061700e20b3b13aa72ffc9ab5bac1e7862e6a7617927edd8ae7853d6",
+      "bytes": 10299
+    },
+    {
+      "pluginId": "in.saraswat.bank",
+      "name": "Saraswat Co-operative Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/saraswat-bank.json",
+      "sha256": "d3e2de46dad4c29740f20c5d356b6c2aec2e8b1dca95c66dca1216d2689937da",
+      "bytes": 10007
+    },
+    {
+      "pluginId": "in.sbi.bank",
+      "name": "State Bank of India",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/sbi-bank.json",
+      "sha256": "3a4e55713ff35e391612bdeca83cd24e7ae1a0cf1552649b127966a81bda17e4",
+      "bytes": 4082
+    },
+    {
+      "pluginId": "in.sib.bank",
+      "name": "South Indian Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/south-indian-bank.json",
+      "sha256": "4c3d49ec5c247e193771bfb9fa44cd63bd44a60b30cbe0be994bbfef05e2aff7",
+      "bytes": 7585
+    },
+    {
+      "pluginId": "in.slice",
+      "name": "Slice",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/slice.json",
+      "sha256": "8c6ab4b6df5fbe92dfab6fae4cf4d0236231e6154e028b8300cc4ec9f396b4b1",
+      "bytes": 1656
+    },
+    {
+      "pluginId": "in.standardchartered.bank",
+      "name": "Standard Chartered Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/standard-chartered-bank.json",
+      "sha256": "0e8f88db7bf7a5ae8b3551b7506dd4ddddc4105aed6185f6c2f5de11b90dfa0c",
+      "bytes": 8321
+    },
+    {
+      "pluginId": "in.uco.bank",
+      "name": "UCO Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/uco-bank.json",
+      "sha256": "fbdaac8678621fc02f7ef1433df4753a755320cfb489c3104489d6895679a171",
+      "bytes": 6874
+    },
+    {
+      "pluginId": "in.unionbank.bank",
+      "name": "Union Bank of India",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/union-bank.json",
+      "sha256": "5bfd1f3c03386183aa1c3f0e2a4699c673bb49397bf6cf4c66f6bae785b2493a",
+      "bytes": 9123
+    },
+    {
+      "pluginId": "in.utkarsh.card",
+      "name": "Utkarsh Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/utkarsh-bank.json",
+      "sha256": "67b190803c7605019cbe401bf68a2f19e9e7e1a0aa8abedd4bf8be50474a0ef7",
+      "bytes": 8797
+    },
+    {
+      "pluginId": "in.yesbank.bank",
+      "name": "Yes Bank",
+      "country": "IN",
+      "currency": "INR",
+      "version": "1",
+      "file": "manifests/yes-bank.json",
+      "sha256": "f15619a3c236062cee3121d47f8b169a98e03e9cfe72f2e2a8f3236289f34e14",
+      "bytes": 10617
+    },
+    {
+      "pluginId": "ir.melli.bank",
+      "name": "Melli Bank",
+      "country": "IR",
+      "currency": "IRR",
+      "version": "1",
+      "file": "manifests/melli-bank.json",
+      "sha256": "c12653007e05f504563c29ad929966d366665cb0a98b0961cb8dcea67c8338dd",
+      "bytes": 6182
+    },
+    {
+      "pluginId": "ir.parsian.bank",
+      "name": "Parsian Bank",
+      "country": "IR",
+      "currency": "IRR",
+      "version": "1",
+      "file": "manifests/parsian-bank.json",
+      "sha256": "5c200e13c0b1d529a0806eb9a5f6ab74315c8abd68b9acac6181cc49c0c22ac8",
+      "bytes": 5799
+    },
+    {
+      "pluginId": "ke.mpesa.wallet",
+      "name": "M-PESA",
+      "country": "KE",
+      "currency": "KES",
+      "version": "1",
+      "file": "manifests/mpesa.json",
+      "sha256": "fb08d21e562eafd3ac39935371571e06bd10e32598c42a68a5be77b8f26f2271",
+      "bytes": 8985
+    },
+    {
+      "pluginId": "np.everest.bank",
+      "name": "Everest Bank",
+      "country": "NP",
+      "currency": "NPR",
+      "version": "1",
+      "file": "manifests/everest-bank.json",
+      "sha256": "14ce153a8521ccff217ab6e82452ae4e409435be34053780ca20b42716159780",
+      "bytes": 8074
+    },
+    {
+      "pluginId": "np.laxmi.bank",
+      "name": "Laxmi Sunrise Bank",
+      "country": "NP",
+      "currency": "NPR",
+      "version": "1",
+      "file": "manifests/laxmi-bank.json",
+      "sha256": "afda32ac7edfdfaad082f83a82268c239009b2253b303ac3a1dbc329ddba3ad9",
+      "bytes": 5550
+    },
+    {
+      "pluginId": "np.manjushree.bank",
+      "name": "Manjushree Finance",
+      "country": "NP",
+      "currency": "NPR",
+      "version": "1",
+      "file": "manifests/manjushree-finance.json",
+      "sha256": "e5625f47bea05cc3e10c15dc1564ab4e70b60f6b9ee7435cda695af01b9e376c",
+      "bytes": 5931
+    },
+    {
+      "pluginId": "np.nabil.bank",
+      "name": "Nabil Bank",
+      "country": "NP",
+      "currency": "NPR",
+      "version": "1",
+      "file": "manifests/nabil-bank.json",
+      "sha256": "a98cf502532931df6acb9bd30335a2fbb37605a18470038e0c984eb4fc34ac81",
+      "bytes": 6504
+    },
+    {
+      "pluginId": "np.nmb.bank",
+      "name": "NMB Bank",
+      "country": "NP",
+      "currency": "NPR",
+      "version": "1",
+      "file": "manifests/nmb-bank.json",
+      "sha256": "15b0ce6c90ab919f5b2680516fbd03d28be701f7e4ed073c76fe91b6a22f6d47",
+      "bytes": 5457
+    },
+    {
+      "pluginId": "np.primecommercial.bank",
+      "name": "Prime Commercial Bank",
+      "country": "NP",
+      "currency": "NPR",
+      "version": "1",
+      "file": "manifests/prime-commercial-bank.json",
+      "sha256": "af5b94c3c38112e13a0c309d02cba345eb175c84374797d558e4b5120b2a8fb0",
+      "bytes": 3564
+    },
+    {
+      "pluginId": "np.siddhartha.bank",
+      "name": "Siddhartha Bank",
+      "country": "NP",
+      "currency": "NPR",
+      "version": "1",
+      "file": "manifests/siddhartha-bank.json",
+      "sha256": "e5c20a9186e76064a13b8a75e3a3acbb16e71d8be87effcd35e392845345e63d",
+      "bytes": 5971
+    },
+    {
+      "pluginId": "om.bankmuscat.bank",
+      "name": "Bank Muscat",
+      "country": "OM",
+      "currency": "OMR",
+      "version": "1",
+      "file": "manifests/bank-muscat.json",
+      "sha256": "874bb54a54e0f0b2badb76b11629f07f9a748da1ee1e82f30e8203d6a693d8eb",
+      "bytes": 5923
+    },
+    {
+      "pluginId": "pk.faysal.bank",
+      "name": "Faysal Bank",
+      "country": "PK",
+      "currency": "PKR",
+      "version": "1",
+      "file": "manifests/faysal-bank.json",
+      "sha256": "e015536ef21f923309e010b9036979034d3313364facd20cab26b12c726f1e46",
+      "bytes": 7507
+    },
+    {
+      "pluginId": "ru.tbank.bank",
+      "name": "T-Bank",
+      "country": "RU",
+      "currency": "RUB",
+      "version": "1",
+      "file": "manifests/t-bank.json",
+      "sha256": "5d00905ac2bb717a14764e90d4ab602f6fd750c3d3cecfbd2d82208c873a48fd",
+      "bytes": 5101
+    },
+    {
+      "pluginId": "sa.alinma.bank",
+      "name": "Alinma Bank",
+      "country": "SA",
+      "currency": "SAR",
+      "version": "1",
+      "file": "manifests/alinma-bank.json",
+      "sha256": "da36124b18b841d4228fdc0d77f7ad77482e17a8072b94c8a23604e2763ba78d",
+      "bytes": 5538
+    },
+    {
+      "pluginId": "sa.alrajhi.bank",
+      "name": "Al Rajhi Bank",
+      "country": "SA",
+      "currency": "SAR",
+      "version": "1",
+      "file": "manifests/al-rajhi-bank.json",
+      "sha256": "9be7167fbdc43fb14be939c3e1a2acbb7461d62d037592df9fb1f61dd53069ed",
+      "bytes": 7622
+    },
+    {
+      "pluginId": "th.baac.bank",
+      "name": "BAAC",
+      "country": "TH",
+      "currency": "THB",
+      "version": "1",
+      "file": "manifests/baac-bank.json",
+      "sha256": "64f7797fce1c69c8f995fa594ca8983f46a3399be615018fbf12854cbc69586a",
+      "bytes": 9276
+    },
+    {
+      "pluginId": "th.bbl.bank",
+      "name": "Bangkok Bank",
+      "country": "TH",
+      "currency": "THB",
+      "version": "1",
+      "file": "manifests/bangkok-bank.json",
+      "sha256": "47124d691736f9d294089f3c148efbc77f21b4e1de61eaa5c6e4455296e4dad7",
+      "bytes": 7841
+    },
+    {
+      "pluginId": "th.cimb.bank",
+      "name": "CIMB Thai",
+      "country": "TH",
+      "currency": "THB",
+      "version": "1",
+      "file": "manifests/cimb-thai.json",
+      "sha256": "79644af3ce7a3b86d93a047e7391c45c9e71dd1236f0217529ba44e273191629",
+      "bytes": 7371
+    },
+    {
+      "pluginId": "th.gsb.bank",
+      "name": "Government Savings Bank",
+      "country": "TH",
+      "currency": "THB",
+      "version": "1",
+      "file": "manifests/gsb-bank.json",
+      "sha256": "921bfac84fd888a98d2fd3fe433e1b3d26b1740c871efffa89fca4f154d4bf60",
+      "bytes": 9249
+    },
+    {
+      "pluginId": "th.kasikorn.bank",
+      "name": "Kasikorn Bank",
+      "country": "TH",
+      "currency": "THB",
+      "version": "1",
+      "file": "manifests/kasikorn-bank.json",
+      "sha256": "377a255d04b9ef421b46d4952dec5a07117fb0e1d26c901f7e64ac8dd59d6ac0",
+      "bytes": 8663
+    },
+    {
+      "pluginId": "th.krungsri.bank",
+      "name": "Krungsri (Bank of Ayudhya)",
+      "country": "TH",
+      "currency": "THB",
+      "version": "1",
+      "file": "manifests/krungsri-bank.json",
+      "sha256": "9828dc4407f115c45782caf5bc59c8eb21634b996405f97345a3a5cc6c49b619",
+      "bytes": 9228
+    },
+    {
+      "pluginId": "th.ktb.bank",
+      "name": "Krungthai Bank",
+      "country": "TH",
+      "currency": "THB",
+      "version": "1",
+      "file": "manifests/krung-thai-bank.json",
+      "sha256": "374cbbc2ee3a503f3e6e3cd300b513d54bbc5945e9cce9811247214a4878649c",
+      "bytes": 7756
+    },
+    {
+      "pluginId": "th.ktc.card",
+      "name": "KTC",
+      "country": "TH",
+      "currency": "THB",
+      "version": "1",
+      "file": "manifests/ktc-credit-card.json",
+      "sha256": "40fcb01d52a218f0418a0d2c30821f61af00703ba7fe330052693102e4fb3bbe",
+      "bytes": 8013
+    },
+    {
+      "pluginId": "th.scb.bank",
+      "name": "Siam Commercial Bank",
+      "country": "TH",
+      "currency": "THB",
+      "version": "1",
+      "file": "manifests/siam-commercial-bank.json",
+      "sha256": "d23b42aaab4bb180aca5cb1351e70ea0c30921f5ace3fd77f914ecc61f7eff78",
+      "bytes": 8656
+    },
+    {
+      "pluginId": "th.ttb.bank",
+      "name": "TMBThanachart Bank (TTB)",
+      "country": "TH",
+      "currency": "THB",
+      "version": "1",
+      "file": "manifests/ttb-bank.json",
+      "sha256": "1fb1b193c1577f7b6305cd0f1c739825e6d07069eac912ae1f28119748a18a25",
+      "bytes": 9189
+    },
+    {
+      "pluginId": "th.uob.bank",
+      "name": "UOB Thailand",
+      "country": "TH",
+      "currency": "THB",
+      "version": "1",
+      "file": "manifests/uob-thailand.json",
+      "sha256": "a3a5d9d104c23e49ae7f58a30e4cde86bd7a7f8e2b594728f2897d287ed392e7",
+      "bytes": 7787
+    },
+    {
+      "pluginId": "tz.mpesa.wallet",
+      "name": "M-Pesa Tanzania",
+      "country": "TZ",
+      "currency": "TZS",
+      "version": "1",
+      "file": "manifests/m-pesa-tanzania.json",
+      "sha256": "ba4ccce3516e5a9f03030b17ccf242b6489b74e6891e18e8ed9c853235864281",
+      "bytes": 6101
+    },
+    {
+      "pluginId": "tz.selcom.wallet",
+      "name": "Selcom Pesa",
+      "country": "TZ",
+      "currency": "TZS",
+      "version": "1",
+      "file": "manifests/selcom-pesa.json",
+      "sha256": "415bce6c822d3f583b5e9fe5296cbb67beb135cfae95c6cd7638f0182bf26eba",
+      "bytes": 7770
+    },
+    {
+      "pluginId": "tz.tigopesa.wallet",
+      "name": "Tigo Pesa",
+      "country": "TZ",
+      "currency": "TZS",
+      "version": "1",
+      "file": "manifests/tigo-pesa.json",
+      "sha256": "3eb1773a39dd7c90e834abf75012e9e147737641c4039816005516b0f0b03e30",
+      "bytes": 7364
+    },
+    {
+      "pluginId": "us.adelfi.bank",
+      "name": "AdelFi",
+      "country": "US",
+      "currency": "USD",
+      "version": "1",
+      "file": "manifests/adel-fi.json",
+      "sha256": "a3851722c9b5a1216b5949cac566bbbf9f734387580c6f6d866edb88aec0113d",
+      "bytes": 4110
+    },
+    {
+      "pluginId": "us.alecu.bank",
+      "name": "ALECU",
+      "country": "US",
+      "currency": "USD",
+      "version": "1",
+      "file": "manifests/alecu-bank.json",
+      "sha256": "453754199249af633a646e16704d034bd68f3236f8ada2e9de6f58a22322a1a1",
+      "bytes": 4366
+    },
+    {
+      "pluginId": "us.chase.bank",
+      "name": "Chase",
+      "country": "US",
+      "currency": "USD",
+      "version": "1",
+      "file": "manifests/chase-bank.json",
+      "sha256": "b5019d1c4a4bc5a0a5360b97c10c9b7369424f1822028099ef1ab47e07174455",
+      "bytes": 5321
+    },
+    {
+      "pluginId": "us.citi.card",
+      "name": "Citi Bank",
+      "country": "US",
+      "currency": "USD",
+      "version": "1",
+      "file": "manifests/citi-bank.json",
+      "sha256": "f7ea86131f25b0b1c9c5f0a782016559d61526a1e8cabaf648c737c0630c88c8",
+      "bytes": 5432
+    },
+    {
+      "pluginId": "us.discover.card",
+      "name": "Discover Card",
+      "country": "US",
+      "currency": "USD",
+      "version": "1",
+      "file": "manifests/discover-card.json",
+      "sha256": "a59b92bbaa7ac34b4e06684ac5806288240baed69c6b13b59079b41ddaa5ab00",
+      "bytes": 5233
+    },
+    {
+      "pluginId": "us.huntington.bank",
+      "name": "Huntington Bank",
+      "country": "US",
+      "currency": "USD",
+      "version": "1",
+      "file": "manifests/huntington-bank.json",
+      "sha256": "f912b854d55e5bd9d932e5e69e25718c048f8d0435884b57ac88a33be9e10f74",
+      "bytes": 7341
+    },
+    {
+      "pluginId": "us.navyfederal.bank",
+      "name": "Navy Federal Credit Union",
+      "country": "US",
+      "currency": "USD",
+      "version": "1",
+      "file": "manifests/navy-federal.json",
+      "sha256": "71ad9233b31d8e2699aa07952740d101c9d57e1f45351aefa3602479ff3c8109",
+      "bytes": 6280
+    },
+    {
+      "pluginId": "us.oldhickory.bank",
+      "name": "Old Hickory Credit Union",
+      "country": "US",
+      "currency": "USD",
+      "version": "1",
+      "file": "manifests/old-hickory.json",
+      "sha256": "f21ce147f3cf60dbf212bb08e659a1e06f54e44b92b44c51ee7e36390ea5cbf0",
+      "bytes": 6407
+    },
+    {
+      "pluginId": "us.schwab.bank",
+      "name": "Charles Schwab",
+      "country": "US",
+      "currency": "USD",
+      "version": "1",
+      "file": "manifests/charles-schwab.json",
+      "sha256": "a8766d0349f6e5a785f22dd7202daca90cf753efcf51efc3ce383a9e86458b0e",
+      "bytes": 9761
+    }
+  ]
+}

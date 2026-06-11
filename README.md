@@ -41,6 +41,25 @@ porting notes and known deviations live in `docs/parser-port-notes.md`.
 - Privacy: fixture bodies must not contain real personal data — replace names,
   phone numbers, and full account numbers with realistic stand-ins.
 
+## Catalog / app consumption
+
+`index.json` at the repo root is the machine-readable catalog: one entry per
+bank with `pluginId`, `name`, `country`, `currency`, `version`, the manifest
+`file` path, its `sha256` (hex of the raw file bytes), and `bytes`. CI
+regenerates it on every push to `main`
+(`.github/workflows/catalog.yml` → `bun scripts/generate-catalog.ts`) after
+full validation; don't edit it by hand.
+
+The Unmiser app consumes the store over the jsDelivr CDN:
+
+1. Fetch the catalog to populate the browse list:
+   `https://cdn.jsdelivr.net/gh/Vijayabaskar56/unmiser-extensions@main/index.json`
+2. On install, fetch only the chosen bundle:
+   `https://cdn.jsdelivr.net/gh/Vijayabaskar56/unmiser-extensions@main/manifests/<file>`
+3. The app re-hashes the downloaded body and rejects on `sha256` mismatch
+   (checksum verified client-side). The catalog's top-level `signature` field
+   is reserved and currently `null` — manifest signing is deferred.
+
 ## How validation works
 
 `src/` vendors the Unmiser parser engine (source of truth lives in the app
