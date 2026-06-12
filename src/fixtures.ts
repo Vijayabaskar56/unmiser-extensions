@@ -41,6 +41,26 @@ export function validateManifestFixtures(bundle: ManifestWithFixtures): FixtureF
         });
       }
     }
+
+    for (const [field, expectedValue] of Object.entries(fixture.expected.mandate ?? {})) {
+      const actualValue = result.mandate?.[field as keyof typeof result.mandate];
+      if (actualValue !== expectedValue) {
+        failures.push({
+          fixture: fixture.name,
+          message: `Expected mandate.${field}=${String(expectedValue)}, got ${String(actualValue)}`,
+        });
+      }
+    }
+
+    if (
+      fixture.expected.mandateParseFailed !== undefined &&
+      Boolean(result.mandateParseFailed) !== fixture.expected.mandateParseFailed
+    ) {
+      failures.push({
+        fixture: fixture.name,
+        message: `Expected mandateParseFailed=${fixture.expected.mandateParseFailed}`,
+      });
+    }
   }
 
   return failures;

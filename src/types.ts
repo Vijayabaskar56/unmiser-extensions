@@ -6,6 +6,7 @@ export type ParserConfidence = (typeof PARSER_CONFIDENCE)[number];
 export const PARSER_REASONS = [
   "NO_MATCHING_MANIFEST",
   "FILTER_REJECTED",
+  "MANDATE_DETECTED",
   "MISSING_AMOUNT",
   "MISSING_TYPE",
   "MISSING_MERCHANT",
@@ -102,6 +103,14 @@ export interface SmsParserManifest {
     minMerchantLength?: number;
     commonWords?: string[];
   };
+  mandate?: {
+    detectKeyword: string;
+    amount: string;
+    date: string;
+    merchant: string;
+    umn?: string;
+    dateFormat: string;
+  };
   pipeline?: PipelineStep[];
 }
 
@@ -125,6 +134,24 @@ export interface ParsedSmsFields {
   transactionHash?: string;
 }
 
+export interface MandateRaw {
+  amount?: string;
+  date?: string;
+  merchant?: string;
+  umn?: string;
+  dateFormat: string;
+}
+
+export interface MandateInfo {
+  amount: string;
+  nextDeductionDate: string;
+  merchant: string;
+  umn?: string;
+  currency: string;
+  pluginId: string;
+  provider: string;
+}
+
 export interface ParserResult {
   confidence: ParserConfidence;
   reasons: ParserReason[];
@@ -132,8 +159,14 @@ export interface ParserResult {
     pluginId: string;
     version: string;
     name: string;
+    currency: string;
   };
   fields?: ParsedSmsFields;
+  mandateRaw?: MandateRaw;
+  mandate?: MandateInfo;
+  mandateParseFailed?: {
+    reasons: string[];
+  };
   rawMatches: RawMatch[];
 }
 
@@ -145,6 +178,8 @@ export interface ManifestFixture {
   expected: {
     confidence: ParserConfidence;
     fields?: Partial<ParsedSmsFields>;
+    mandate?: Partial<MandateInfo>;
+    mandateParseFailed?: boolean;
     reasons?: ParserReason[];
   };
 }

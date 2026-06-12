@@ -144,6 +144,14 @@
       "minMerchantLength": 2,
       "commonWords": ["USING", "VIA", "THROUGH", "TO", "FROM"]
     },
+    "mandate": {
+      "detectKeyword": "E-Mandate!",
+      "amount": "Rs\\.?\\s*(?<value>[0-9,]+(?:\\.\\d{1,2})?)\\s+will\\s+be\\s+deducted",
+      "date": "deducted\\s+on\\s+(?<value>\\d{2}/\\d{2}/\\d{2}),?\\s*\\d{2}:\\d{2}:\\d{2}",
+      "merchant": "For\\s+(?<value>[^\\n]+?)\\s+mandate",
+      "umn": "UMN\\s+(?<value>[a-zA-Z0-9@]+)",
+      "dateFormat": "dd/MM/yy"
+    },
     "pipeline": [
       {
         "kind": "setFieldWhen",
@@ -161,6 +169,35 @@
     ]
   },
   "fixtures": [
+    {
+      "name": "e-mandate subscription notice",
+      "sender": "VM-HDFCBK-S",
+      "receivedAt": "2026-06-09T10:00:00.000Z",
+      "body": "E-Mandate! Rs.1,499 will be deducted on 15/07/26, 09:00:00 For NETFLIX mandate UMN HDFCUMN12345",
+      "expected": {
+        "confidence": "HIGH",
+        "reasons": ["MANDATE_DETECTED"],
+        "mandate": {
+          "amount": "1499",
+          "nextDeductionDate": "2026-07-15",
+          "merchant": "NETFLIX",
+          "umn": "HDFCUMN12345",
+          "currency": "INR",
+          "pluginId": "in.hdfc.bank"
+        }
+      }
+    },
+    {
+      "name": "e-mandate missing date goes to review",
+      "sender": "VM-HDFCBK-S",
+      "receivedAt": "2026-06-09T10:00:00.000Z",
+      "body": "E-Mandate! Rs.1,499 will be deducted soon For NETFLIX mandate UMN HDFCUMN12345",
+      "expected": {
+        "confidence": "REVIEW",
+        "reasons": ["MANDATE_DETECTED"],
+        "mandateParseFailed": true
+      }
+    },
     {
       "name": "upi sent format",
       "sender": "VM-HDFCBK-S",

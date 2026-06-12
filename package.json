@@ -9,6 +9,7 @@
     "test": "bun scripts/validate-all.ts"
   },
   "dependencies": {
+    "date-fns": "^4.4.0",
     "decimal.js": "^10.6.0",
     "js-md5": "^0.8.3",
     "zod": "^4.1.13"

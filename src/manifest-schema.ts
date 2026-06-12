@@ -59,6 +59,15 @@ const pipelineStepSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
+const mandateSchema = z.object({
+  detectKeyword: z.string().min(1),
+  amount: z.string().min(1),
+  date: z.string().min(1),
+  merchant: z.string().min(1),
+  umn: z.string().min(1).optional(),
+  dateFormat: z.string().min(1),
+});
+
 export const smsParserManifestSchema = z.object({
   schemaVersion: z.literal("1.0"),
   pluginId: z.string().min(3),
@@ -107,6 +116,7 @@ export const smsParserManifestSchema = z.object({
       commonWords: z.array(z.string()).optional(),
     })
     .optional(),
+  mandate: mandateSchema.optional(),
   pipeline: z.array(pipelineStepSchema).optional(),
 });
 
@@ -137,6 +147,19 @@ export const manifestFixtureSchema = z.object({
   expected: z.object({
     confidence: z.enum(PARSER_CONFIDENCE),
     fields: fixtureFieldsSchema.optional(),
+    mandate: z
+      .object({
+        amount: z.string(),
+        nextDeductionDate: z.string(),
+        merchant: z.string(),
+        umn: z.string(),
+        currency: z.string(),
+        pluginId: z.string(),
+        provider: z.string(),
+      })
+      .partial()
+      .optional(),
+    mandateParseFailed: z.boolean().optional(),
     reasons: z.array(z.enum(PARSER_REASONS)).optional(),
   }),
 });

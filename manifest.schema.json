@@ -46,7 +46,11 @@
         },
         "trust": {
           "type": "string",
-          "enum": ["bundled", "owner", "community"]
+          "enum": [
+            "bundled",
+            "owner",
+            "community"
+          ]
         },
         "dispatch": {
           "type": "object",
@@ -111,7 +115,9 @@
                     "type": "boolean"
                   }
                 },
-                "required": ["re"]
+                "required": [
+                  "re"
+                ]
               }
             },
             "merchant": {
@@ -140,7 +146,9 @@
                     "type": "boolean"
                   }
                 },
-                "required": ["re"]
+                "required": [
+                  "re"
+                ]
               }
             },
             "balance": {
@@ -169,7 +177,9 @@
                     "type": "boolean"
                   }
                 },
-                "required": ["re"]
+                "required": [
+                  "re"
+                ]
               }
             },
             "reference": {
@@ -198,7 +208,9 @@
                     "type": "boolean"
                   }
                 },
-                "required": ["re"]
+                "required": [
+                  "re"
+                ]
               }
             },
             "accountLast4": {
@@ -227,7 +239,9 @@
                     "type": "boolean"
                   }
                 },
-                "required": ["re"]
+                "required": [
+                  "re"
+                ]
               }
             },
             "creditLimit": {
@@ -256,7 +270,9 @@
                     "type": "boolean"
                   }
                 },
-                "required": ["re"]
+                "required": [
+                  "re"
+                ]
               }
             }
           }
@@ -335,6 +351,42 @@
             }
           }
         },
+        "mandate": {
+          "type": "object",
+          "properties": {
+            "detectKeyword": {
+              "type": "string",
+              "minLength": 1
+            },
+            "amount": {
+              "type": "string",
+              "minLength": 1
+            },
+            "date": {
+              "type": "string",
+              "minLength": 1
+            },
+            "merchant": {
+              "type": "string",
+              "minLength": 1
+            },
+            "umn": {
+              "type": "string",
+              "minLength": 1
+            },
+            "dateFormat": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "detectKeyword",
+            "amount",
+            "date",
+            "merchant",
+            "dateFormat"
+          ]
+        },
         "pipeline": {
           "type": "array",
           "items": {
@@ -380,6 +432,7 @@
                     "enum": [
                       "NO_MATCHING_MANIFEST",
                       "FILTER_REJECTED",
+                      "MANDATE_DETECTED",
                       "MISSING_AMOUNT",
                       "MISSING_TYPE",
                       "MISSING_MERCHANT",
@@ -388,7 +441,10 @@
                     ]
                   }
                 },
-                "required": ["kind", "when"]
+                "required": [
+                  "kind",
+                  "when"
+                ]
               },
               {
                 "type": "object",
@@ -464,11 +520,18 @@
                           "type": "boolean"
                         }
                       },
-                      "required": ["re"]
+                      "required": [
+                        "re"
+                      ]
                     }
                   }
                 },
-                "required": ["kind", "when", "field", "extractors"]
+                "required": [
+                  "kind",
+                  "when",
+                  "field",
+                  "extractors"
+                ]
               },
               {
                 "type": "object",
@@ -521,7 +584,10 @@
                       },
                       {
                         "type": "string",
-                        "enum": ["transactionType", "isFromCard"]
+                        "enum": [
+                          "transactionType",
+                          "isFromCard"
+                        ]
                       }
                     ]
                   },
@@ -536,7 +602,12 @@
                     ]
                   }
                 },
-                "required": ["kind", "when", "field", "value"]
+                "required": [
+                  "kind",
+                  "when",
+                  "field",
+                  "value"
+                ]
               },
               {
                 "type": "object",
@@ -560,7 +631,10 @@
                       },
                       {
                         "type": "string",
-                        "enum": ["transactionType", "isFromCard"]
+                        "enum": [
+                          "transactionType",
+                          "isFromCard"
+                        ]
                       }
                     ]
                   },
@@ -575,7 +649,11 @@
                     ]
                   }
                 },
-                "required": ["kind", "field", "value"]
+                "required": [
+                  "kind",
+                  "field",
+                  "value"
+                ]
               },
               {
                 "type": "object",
@@ -615,13 +693,18 @@
                   },
                   "confidence": {
                     "type": "string",
-                    "enum": ["HIGH", "REVIEW", "REJECTED"]
+                    "enum": [
+                      "HIGH",
+                      "REVIEW",
+                      "REJECTED"
+                    ]
                   },
                   "reason": {
                     "type": "string",
                     "enum": [
                       "NO_MATCHING_MANIFEST",
                       "FILTER_REJECTED",
+                      "MANDATE_DETECTED",
                       "MISSING_AMOUNT",
                       "MISSING_TYPE",
                       "MISSING_MERCHANT",
@@ -630,7 +713,11 @@
                     ]
                   }
                 },
-                "required": ["kind", "when", "confidence"]
+                "required": [
+                  "kind",
+                  "when",
+                  "confidence"
+                ]
               }
             ]
           }
@@ -676,7 +763,11 @@
             "properties": {
               "confidence": {
                 "type": "string",
-                "enum": ["HIGH", "REVIEW", "REJECTED"]
+                "enum": [
+                  "HIGH",
+                  "REVIEW",
+                  "REJECTED"
+                ]
               },
               "fields": {
                 "type": "object",
@@ -707,12 +798,47 @@
                   },
                   "transactionType": {
                     "type": "string",
-                    "enum": ["INCOME", "EXPENSE", "CREDIT", "TRANSFER", "INVESTMENT"]
+                    "enum": [
+                      "INCOME",
+                      "EXPENSE",
+                      "CREDIT",
+                      "TRANSFER",
+                      "INVESTMENT"
+                    ]
                   },
                   "isFromCard": {
                     "type": "boolean"
                   }
                 }
+              },
+              "mandate": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "string"
+                  },
+                  "nextDeductionDate": {
+                    "type": "string"
+                  },
+                  "merchant": {
+                    "type": "string"
+                  },
+                  "umn": {
+                    "type": "string"
+                  },
+                  "currency": {
+                    "type": "string"
+                  },
+                  "pluginId": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string"
+                  }
+                }
+              },
+              "mandateParseFailed": {
+                "type": "boolean"
               },
               "reasons": {
                 "type": "array",
@@ -721,6 +847,7 @@
                   "enum": [
                     "NO_MATCHING_MANIFEST",
                     "FILTER_REJECTED",
+                    "MANDATE_DETECTED",
                     "MISSING_AMOUNT",
                     "MISSING_TYPE",
                     "MISSING_MERCHANT",
@@ -730,14 +857,25 @@
                 }
               }
             },
-            "required": ["confidence"]
+            "required": [
+              "confidence"
+            ]
           }
         },
-        "required": ["name", "sender", "body", "receivedAt", "expected"]
+        "required": [
+          "name",
+          "sender",
+          "body",
+          "receivedAt",
+          "expected"
+        ]
       }
     }
   },
-  "required": ["manifest", "fixtures"],
+  "required": [
+    "manifest",
+    "fixtures"
+  ],
   "title": "Unmiser SMS parser plugin bundle",
   "description": "A bank SMS parser plugin: the declarative manifest plus fixtures proving it. Validate with `bun scripts/validate-manifest.ts <file>`."
 }

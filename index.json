@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1",
-  "generatedAt": "2026-06-11T18:16:05.680Z",
+  "generatedAt": "2026-06-12T10:11:56.458Z",
   "signature": null,
   "entries": [
     {
@@ -330,8 +330,8 @@
       "currency": "INR",
       "version": "1",
       "file": "manifests/hdfc-bank.json",
-      "sha256": "a34e6577d8053f8c4a903339be4078a7732a8377e7e6f3607696fcf0ad2e512e",
-      "bytes": 6440
+      "sha256": "91a33f8fa6f7b798b61c5c8f8d645e8453f62a9dedd75c7762bc72f64572c83a",
+      "bytes": 7784
     },
     {
       "pluginId": "in.hdfcmf.bank",
